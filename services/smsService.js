@@ -100,7 +100,8 @@ class Fast2SMSService {
   }
 
   /**
-   * Send OTP via Fast2SMS (Rewritten for production stability)
+   * Send OTP via Fast2SMS Quick Transactional Route ('q')
+   * This uses the SAME method as the School Management System - NO DLT required
    * @param {string} mobile - 10-digit Indian mobile number
    * @param {string} otp - 6-digit OTP
    * @param {string} userId - User ID for logging
@@ -138,18 +139,20 @@ class Fast2SMSService {
         };
       }
 
-      // Add country code: 91XXXXXXXXXX (MUST be string, not array)
-      const numbersWithCountryCode = `91${cleanMobile}`;
-
       // Log attempt (mask mobile for security)
       logger.info(`Attempting to send OTP to ******${cleanMobile.substring(6)}`);
 
-      // EXACT Fast2SMS OTP payload structure
+      // CRITICAL: Use Quick Transactional Route 'q' (SAME AS SCHOOL PROJECT)
+      // This route does NOT require DLT templates or OTP Message API
+      // Replace {{OTP}} placeholder with actual OTP in the message
+      const message = `Your TiffinMate login OTP is ${otp}. Valid for 5 minutes. Do not share this OTP.`;
+
+      // EXACT Fast2SMS Quick Transactional payload structure
       const payload = {
-        route: 'otp',
-        numbers: numbersWithCountryCode,  // STRING, not array
-        variables_values: otp,             // 6-digit OTP
-        flash: 0                          // Required: 0 = normal SMS, 1 = flash SMS
+        route: 'q',                 // Quick Transactional Route - NO DLT required
+        language: 'english',
+        message: message,           // Dynamic message with OTP embedded
+        numbers: cleanMobile        // 10-digit number WITHOUT country code
       };
 
       // Make API request
@@ -164,13 +167,13 @@ class Fast2SMSService {
       // Check Fast2SMS response
       const success = response.data && response.data.return === true;
 
-      // Log to database
+      // Log to database (don't store actual OTP)
       if (userId) {
         await NotificationLog.create({
           user: userId,
           mobile: cleanMobile,
           type: 'otp',
-          message: 'OTP sent',  // Don't log actual OTP
+          message: 'OTP sent via Quick Transactional route',  // Don't log actual OTP
           status: success ? 'sent' : 'failed',
           response: response.data,
           sentAt: new Date()
@@ -219,9 +222,7 @@ class Fast2SMSService {
 
       return {
         success: false,
-        error: error.response?.status === 400 
-          ? 'OTP service temporarily unavailable' 
-          : error.message
+        error: 'OTP service unavailable'
       };
     }
   }

@@ -91,23 +91,29 @@ userSchema.methods.comparePassword = async function(candidatePassword) {
 };
 
 // Method to generate OTP
-userSchema.methods.generateOTP = function() {
+userSchema.methods.generateOTP = async function() {
   const otp = Math.floor(100000 + Math.random() * 900000).toString();
+  
+  // Hash OTP with bcrypt for security (same salt rounds as password)
+  const salt = await bcrypt.genSalt(10);
+  const hashedOTP = await bcrypt.hash(otp, salt);
+  
   this.otp = {
-    code: otp,
-    expiry: new Date(Date.now() + parseInt(process.env.OTP_EXPIRY_MINUTES || 2) * 60 * 1000),
+    code: hashedOTP,  // Store HASHED OTP, not plain text
+    expiry: new Date(Date.now() + 5 * 60 * 1000),  // 5 minutes expiry
     attempts: 0
   };
-  return otp;
+  
+  return otp;  // Return plain OTP to send via SMS
 };
 
 // Method to verify OTP
-userSchema.methods.verifyOTP = function(candidateOTP) {
+userSchema.methods.verifyOTP = async function(candidateOTP) {
   if (!this.otp || !this.otp.code) {
     return { success: false, message: 'No OTP generated' };
   }
   
-  if (this.otp.attempts >= parseInt(process.env.OTP_MAX_ATTEMPTS || 3)) {
+  if (this.otp.attempts >= 3) {
     return { success: false, message: 'Maximum OTP attempts exceeded' };
   }
   
@@ -117,7 +123,10 @@ userSchema.methods.verifyOTP = function(candidateOTP) {
   
   this.otp.attempts += 1;
   
-  if (this.otp.code === candidateOTP) {
+  // Compare OTP using bcrypt (since we store hashed OTP)
+  const isMatch = await bcrypt.compare(candidateOTP, this.otp.code);
+  
+  if (isMatch) {
     this.otp = undefined; // Clear OTP after successful verification
     return { success: true, message: 'OTP verified successfully' };
   }

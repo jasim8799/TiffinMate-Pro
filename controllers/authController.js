@@ -62,11 +62,11 @@ exports.login = async (req, res) => {
       });
     }
 
-    // Generate random 6-digit OTP
-    const otp = user.generateOTP();
+    // Generate random 6-digit OTP (now async - returns plain OTP to send)
+    const otp = await user.generateOTP();
     await user.save();
 
-    // Send OTP via Fast2SMS
+    // Send OTP via Fast2SMS Quick Transactional Route
     const smsResult = await smsService.sendOTP(user.mobile, otp, user._id);
     
     if (!smsResult.success) {
@@ -76,9 +76,10 @@ exports.login = async (req, res) => {
       user.otp = undefined;
       await user.save();
       
+      // Return HTTP 503 (Service Unavailable) for SMS failures
       return res.status(503).json({
         success: false,
-        message: 'OTP service temporarily unavailable. Please try again in a moment.'
+        message: 'OTP service unavailable. Please try again later.'
       });
     }
 
@@ -128,15 +129,15 @@ exports.verifyOTP = async (req, res) => {
       });
     }
 
-    // Verify OTP
-    const verification = user.verifyOTP(otp);
+    // Verify OTP (now async - uses bcrypt.compare)
+    const verification = await user.verifyOTP(otp);
 
     if (!verification.success) {
       await user.save(); // Save updated attempt count
       return res.status(400).json({
         success: false,
         message: verification.message,
-        attemptsRemaining: 3 - user.otp.attempts
+        attemptsRemaining: user.otp ? Math.max(0, 3 - user.otp.attempts) : 0
       });
     }
 
@@ -364,12 +365,22 @@ exports.resendOTP = async (req, res) => {
       });
     }
 
-    // Generate new OTP
-    const otp = user.generateOTP();
+    // Generate new OTP (now async)
+    const otp = await user.generateOTP();
     await user.save();
 
     // Send OTP via SMS
-    await smsService.sendOTP(user.mobile, otp, user._id);
+    const smsResult = await smsService.sendOTP(user.mobile, otp, user._id);
+    
+    if (!smsResult.success) {
+      user.otp = undefined;
+      await user.save();
+      
+      return res.status(503).json({
+        success: false,
+        message: 'OTP service unavailable. Please try again later.'
+      });
+    }
 
     res.status(200).json({
       success: true,

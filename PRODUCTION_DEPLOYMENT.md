@@ -110,8 +110,6 @@ MONGODB_URI=mongodb+srv://username:password@cluster0.xxxxx.mongodb.net/tiffinmat
 JWT_SECRET=GENERATE_A_SUPER_LONG_RANDOM_STRING_HERE_USE_PASSWORD_GENERATOR
 JWT_EXPIRE=7d
 FAST2SMS_API_KEY=your_fast2sms_api_key_here
-OTP_EXPIRY_MINUTES=2
-OTP_MAX_ATTEMPTS=3
 MEAL_CUTOFF_HOURS=8
 DEFAULT_ADMIN_USERID=ADMIN001
 DEFAULT_ADMIN_PASSWORD=ChangeThisPassword123!
@@ -125,6 +123,7 @@ CORS_ORIGIN=*
 - Generate a strong JWT_SECRET (use https://passwordsgenerator.net/)
 - Use real mobile number for DEFAULT_ADMIN_MOBILE
 - Change DEFAULT_ADMIN_PASSWORD after first login
+- Fast2SMS uses Quick Transactional Route ('q') - NO DLT registration required
 
 ### 4.3 Deploy
 
