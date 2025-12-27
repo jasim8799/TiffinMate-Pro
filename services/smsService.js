@@ -99,65 +99,78 @@ class Fast2SMSService {
     }
   }
 
+  /**
+   * Send OTP via Fast2SMS (Rewritten for production stability)
+   * @param {string} mobile - 10-digit Indian mobile number
+   * @param {string} otp - 6-digit OTP
+   * @param {string} userId - User ID for logging
+   * @returns {Object} { success: boolean, data?: object, error?: string }
+   */
   async sendOTP(mobile, otp, userId) {
     try {
       // Validate API key
       if (!this.apiKey) {
-        logger.error('Fast2SMS API key not configured');
+        logger.error('Fast2SMS API key not configured in environment');
         return {
           success: false,
-          error: 'SMS service not configured'
+          error: 'OTP service not configured'
         };
       }
 
-      // Validate OTP format
+      // Validate OTP format (6 digits)
       if (!/^\d{6}$/.test(otp)) {
-        logger.error('Invalid OTP format');
+        logger.error('Invalid OTP format - must be 6 digits');
         return {
           success: false,
           error: 'Invalid OTP format'
         };
       }
 
-      // Sanitize and validate mobile number
+      // Sanitize mobile number (remove spaces, dashes, etc.)
       const cleanMobile = sanitizeMobile(mobile);
       
+      // Validate Indian mobile number (10 digits, starts with 6-9)
       if (!isValidIndianMobile(cleanMobile)) {
-        logger.error(`Invalid mobile format for OTP`);
+        logger.error(`Invalid Indian mobile number format`);
         return {
           success: false,
           error: 'Invalid mobile number'
         };
       }
 
-      // Normalize to Fast2SMS format: 91XXXXXXXXXX
-      const normalizedMobile = normalizeMobileForSMS(cleanMobile);
+      // Add country code: 91XXXXXXXXXX (MUST be string, not array)
+      const numbersWithCountryCode = `91${cleanMobile}`;
 
-      logger.info(`Sending OTP to ******${cleanMobile.substring(6)}`);
+      // Log attempt (mask mobile for security)
+      logger.info(`Attempting to send OTP to ******${cleanMobile.substring(6)}`);
 
-      // Use Fast2SMS OTP route
-      const response = await axios.post(this.baseURL, {
+      // EXACT Fast2SMS OTP payload structure
+      const payload = {
         route: 'otp',
-        variables_values: otp,
-        numbers: normalizedMobile
-      }, {
+        numbers: numbersWithCountryCode,  // STRING, not array
+        variables_values: otp,             // 6-digit OTP
+        flash: 0                          // Required: 0 = normal SMS, 1 = flash SMS
+      };
+
+      // Make API request
+      const response = await axios.post(this.baseURL, payload, {
         headers: {
-          'authorization': this.apiKey,
+          'authorization': this.apiKey,   // NO "Bearer" prefix
           'Content-Type': 'application/json'
         },
-        timeout: 10000
+        timeout: 15000  // 15 second timeout
       });
 
-      // Check if SMS was sent successfully
+      // Check Fast2SMS response
       const success = response.data && response.data.return === true;
 
-      // Log notification in database
+      // Log to database
       if (userId) {
         await NotificationLog.create({
           user: userId,
           mobile: cleanMobile,
           type: 'otp',
-          message: `OTP: ${otp}`,
+          message: 'OTP sent',  // Don't log actual OTP
           status: success ? 'sent' : 'failed',
           response: response.data,
           sentAt: new Date()
@@ -166,36 +179,49 @@ class Fast2SMSService {
 
       if (success) {
         logger.success(`OTP sent successfully to ******${cleanMobile.substring(6)}`);
+        return {
+          success: true,
+          data: response.data
+        };
       } else {
-        logger.warn(`OTP send may have failed: ${JSON.stringify(response.data)}`);
+        logger.error(`Fast2SMS returned non-success response: ${JSON.stringify(response.data)}`);
+        return {
+          success: false,
+          error: 'OTP service error',
+          data: response.data
+        };
       }
 
-      return {
-        success: success,
-        data: response.data
-      };
     } catch (error) {
-      logger.error(`Fast2SMS OTP Error:`, error.message);
+      // Log full error details (but not OTP)
+      logger.error(`Fast2SMS OTP Error: ${error.message}`);
+      
+      if (error.response) {
+        logger.error(`Fast2SMS HTTP ${error.response.status}: ${JSON.stringify(error.response.data)}`);
+      }
 
-      // Log failed notification in database
+      // Log failure to database
       if (userId && mobile) {
         try {
           await NotificationLog.create({
             user: userId,
             mobile: sanitizeMobile(mobile),
             type: 'otp',
-            message: `OTP: ${otp}`,
+            message: 'OTP failed',
             status: 'failed',
-            errorMessage: error.message
+            errorMessage: error.message,
+            sentAt: new Date()
           });
         } catch (logError) {
-          logger.error('Failed to log OTP error:', logError);
+          logger.error('Failed to log OTP error to database:', logError);
         }
       }
 
       return {
         success: false,
-        error: error.message
+        error: error.response?.status === 400 
+          ? 'OTP service temporarily unavailable' 
+          : error.message
       };
     }
   }

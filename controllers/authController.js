@@ -66,14 +66,19 @@ exports.login = async (req, res) => {
     const otp = user.generateOTP();
     await user.save();
 
-    // Send OTP via Fast2SMS to user's mobile
+    // Send OTP via Fast2SMS
     const smsResult = await smsService.sendOTP(user.mobile, otp, user._id);
     
     if (!smsResult.success) {
       console.error(`Failed to send OTP for user ${user.userId}:`, smsResult.error);
-      return res.status(500).json({
+      
+      // Clear OTP from user since SMS failed
+      user.otp = undefined;
+      await user.save();
+      
+      return res.status(503).json({
         success: false,
-        message: 'Unable to send OTP. Please try again.'
+        message: 'OTP service temporarily unavailable. Please try again in a moment.'
       });
     }
 
