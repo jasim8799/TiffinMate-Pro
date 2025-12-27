@@ -62,38 +62,19 @@ exports.login = async (req, res) => {
       });
     }
 
-    // TEMPORARY: Dev OTP for OWNER role testing (bypass SMS)
-    // This allows admin testing without Fast2SMS costs
-    // Customers and delivery agents still use real SMS OTP
-    const isDevOTPEnabled = process.env.DEV_OTP_ENABLED === 'true';
-    const isOwner = user.role.toLowerCase() === 'owner';
-    
-    let otp;
-    let skipSMS = false;
-
-    if (isDevOTPEnabled && isOwner) {
-      // Use fixed dev OTP for admin testing (no SMS sent)
-      otp = user.generateDevOTP();
-      skipSMS = true;
-      console.log(`DEV OTP mode: Fixed OTP generated for admin user ${user.userId}`);
-    } else {
-      // Generate random OTP for customers/delivery or when dev mode disabled
-      otp = user.generateOTP();
-    }
-
+    // Generate random 6-digit OTP
+    const otp = user.generateOTP();
     await user.save();
 
-    // Send OTP via SMS (skip for admin in dev mode)
-    if (!skipSMS) {
-      const smsResult = await smsService.sendOTP(user.mobile, otp, user._id);
-      
-      if (!smsResult.success) {
-        console.error(`Failed to send OTP for user ${user.userId}:`, smsResult.error);
-        return res.status(500).json({
-          success: false,
-          message: 'Unable to send OTP at this time. Please try again in a moment.'
-        });
-      }
+    // Send OTP via Fast2SMS to user's mobile
+    const smsResult = await smsService.sendOTP(user.mobile, otp, user._id);
+    
+    if (!smsResult.success) {
+      console.error(`Failed to send OTP for user ${user.userId}:`, smsResult.error);
+      return res.status(500).json({
+        success: false,
+        message: 'Unable to send OTP. Please try again.'
+      });
     }
 
     // Mask mobile number for security (show only last 4 digits)
@@ -142,35 +123,7 @@ exports.verifyOTP = async (req, res) => {
       });
     }
 
-    // TEMPORARY: Dev OTP verification for admin testing
-    // Accept dev OTP (111111) ONLY for OWNER role when DEV_OTP_ENABLED=true
-    // Reject dev OTP for customers/delivery to ensure they use real SMS
-    const isDevOTPEnabled = process.env.DEV_OTP_ENABLED === 'true';
-    const isOwner = user.role.toLowerCase() === 'owner';
-    const isDevOTP = otp === '111111';
-
-    if (isDevOTP) {
-      // Dev OTP submitted - check if allowed
-      if (!isDevOTPEnabled) {
-        return res.status(400).json({
-          success: false,
-          message: 'Invalid OTP'
-        });
-      }
-      
-      if (!isOwner) {
-        // Reject dev OTP for non-admin users
-        return res.status(400).json({
-          success: false,
-          message: 'Invalid OTP'
-        });
-      }
-      
-      // Dev OTP is valid for admin in dev mode
-      console.log(`DEV OTP mode: Dev OTP accepted for admin user ${user.userId}`);
-    }
-
-    // Verify OTP (handles both dev and real OTP)
+    // Verify OTP
     const verification = user.verifyOTP(otp);
 
     if (!verification.success) {
@@ -214,15 +167,10 @@ exports.verifyOTP = async (req, res) => {
 // @access  Private
 exports.changePassword = async (req, res) => {
   try {
-    console.log('Change password request received');
-    console.log('Request body keys:', Object.keys(req.body));
-    console.log('User ID from JWT:', req.user?._id);
-
     const { oldPassword, newPassword } = req.body;
 
     // Validate required fields
     if (!oldPassword) {
-      console.log('Validation failed: oldPassword missing');
       return res.status(400).json({
         success: false,
         message: 'Current password is required'
@@ -230,7 +178,6 @@ exports.changePassword = async (req, res) => {
     }
 
     if (!newPassword) {
-      console.log('Validation failed: newPassword missing');
       return res.status(400).json({
         success: false,
         message: 'New password is required'
@@ -239,7 +186,6 @@ exports.changePassword = async (req, res) => {
 
     // Validate new password strength
     if (newPassword.length < 8) {
-      console.log('Validation failed: password too short');
       return res.status(400).json({
         success: false,
         message: 'Password must be at least 8 characters long'
@@ -247,7 +193,6 @@ exports.changePassword = async (req, res) => {
     }
 
     if (!/[A-Z]/.test(newPassword)) {
-      console.log('Validation failed: no uppercase letter');
       return res.status(400).json({
         success: false,
         message: 'Password must contain at least one uppercase letter'
@@ -255,7 +200,6 @@ exports.changePassword = async (req, res) => {
     }
 
     if (!/[a-z]/.test(newPassword)) {
-      console.log('Validation failed: no lowercase letter');
       return res.status(400).json({
         success: false,
         message: 'Password must contain at least one lowercase letter'
@@ -263,7 +207,6 @@ exports.changePassword = async (req, res) => {
     }
 
     if (!/[0-9]/.test(newPassword)) {
-      console.log('Validation failed: no number');
       return res.status(400).json({
         success: false,
         message: 'Password must contain at least one number'
@@ -271,10 +214,9 @@ exports.changePassword = async (req, res) => {
     }
 
     if (!/[!@#$%^&*(),.?":{}|<>]/.test(newPassword)) {
-      console.log('Validation failed: no special character');
       return res.status(400).json({
         success: false,
-        message: 'Password must contain at least one special character (!@#$%^&*...)'
+        message: 'Password must contain at least one special character'
       });
     }
 
@@ -282,34 +224,26 @@ exports.changePassword = async (req, res) => {
     const user = await User.findById(req.user._id).select('+password');
 
     if (!user) {
-      console.log('User not found in database');
       return res.status(404).json({
         success: false,
         message: 'User not found'
       });
     }
 
-    console.log('User found, verifying old password');
-
-    // Verify old password using bcrypt
+    // Verify old password
     const isMatch = await user.comparePassword(oldPassword);
 
     if (!isMatch) {
-      console.log('Old password verification failed');
       return res.status(400).json({
         success: false,
         message: 'Current password is incorrect'
       });
     }
 
-    console.log('Old password verified, updating to new password');
-
-    // Update password (will be hashed by pre-save hook)
+    // Update password (bcrypt hash handled by pre-save hook)
     user.password = newPassword;
     user.isPasswordChanged = true;
     await user.save();
-
-    console.log('Password changed successfully for user:', user.userId);
 
     res.status(200).json({
       success: true,
@@ -317,11 +251,9 @@ exports.changePassword = async (req, res) => {
     });
   } catch (error) {
     console.error('Change password error:', error.message);
-    console.error('Stack trace:', error.stack);
     res.status(500).json({
       success: false,
-      message: 'Error changing password. Please try again.',
-      error: error.message
+      message: 'Error changing password. Please try again.'
     });
   }
 };

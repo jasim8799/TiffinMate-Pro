@@ -100,20 +100,104 @@ class Fast2SMSService {
   }
 
   async sendOTP(mobile, otp, userId) {
-    // Validate OTP format
-    if (!/^\d{6}$/.test(otp)) {
-      logger.error(`Invalid OTP format: ${otp}`);
+    try {
+      // Validate API key
+      if (!this.apiKey) {
+        logger.error('Fast2SMS API key not configured');
+        return {
+          success: false,
+          error: 'SMS service not configured'
+        };
+      }
+
+      // Validate OTP format
+      if (!/^\d{6}$/.test(otp)) {
+        logger.error('Invalid OTP format');
+        return {
+          success: false,
+          error: 'Invalid OTP format'
+        };
+      }
+
+      // Sanitize and validate mobile number
+      const cleanMobile = sanitizeMobile(mobile);
+      
+      if (!isValidIndianMobile(cleanMobile)) {
+        logger.error(`Invalid mobile format for OTP`);
+        return {
+          success: false,
+          error: 'Invalid mobile number'
+        };
+      }
+
+      // Normalize to Fast2SMS format: 91XXXXXXXXXX
+      const normalizedMobile = normalizeMobileForSMS(cleanMobile);
+
+      logger.info(`Sending OTP to ******${cleanMobile.substring(6)}`);
+
+      // Use Fast2SMS OTP route
+      const response = await axios.post(this.baseURL, {
+        route: 'otp',
+        variables_values: otp,
+        numbers: normalizedMobile
+      }, {
+        headers: {
+          'authorization': this.apiKey,
+          'Content-Type': 'application/json'
+        },
+        timeout: 10000
+      });
+
+      // Check if SMS was sent successfully
+      const success = response.data && response.data.return === true;
+
+      // Log notification in database
+      if (userId) {
+        await NotificationLog.create({
+          user: userId,
+          mobile: cleanMobile,
+          type: 'otp',
+          message: `OTP: ${otp}`,
+          status: success ? 'sent' : 'failed',
+          response: response.data,
+          sentAt: new Date()
+        });
+      }
+
+      if (success) {
+        logger.success(`OTP sent successfully to ******${cleanMobile.substring(6)}`);
+      } else {
+        logger.warn(`OTP send may have failed: ${JSON.stringify(response.data)}`);
+      }
+
+      return {
+        success: success,
+        data: response.data
+      };
+    } catch (error) {
+      logger.error(`Fast2SMS OTP Error:`, error.message);
+
+      // Log failed notification in database
+      if (userId && mobile) {
+        try {
+          await NotificationLog.create({
+            user: userId,
+            mobile: sanitizeMobile(mobile),
+            type: 'otp',
+            message: `OTP: ${otp}`,
+            status: 'failed',
+            errorMessage: error.message
+          });
+        } catch (logError) {
+          logger.error('Failed to log OTP error:', logError);
+        }
+      }
+
       return {
         success: false,
-        error: 'Invalid OTP format'
+        error: error.message
       };
     }
-
-    const expiryMinutes = process.env.OTP_EXPIRY_MINUTES || 2;
-    const message = `Your TiffinMate OTP is ${otp}. Valid for ${expiryMinutes} minutes. Do not share with anyone.`;
-    
-    logger.info(`Generating OTP for user ${userId}`);
-    return await this.sendSMS(mobile, message, 'otp', userId);
   }
 
   async sendCredentials(mobile, userId, password) {
