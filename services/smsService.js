@@ -1,7 +1,7 @@
 const axios = require('axios');
 const NotificationLog = require('../models/NotificationLog');
 const logger = require('../utils/logger');
-const { isValidIndianMobile, sanitizeMobile } = require('../utils/validation');
+const { isValidIndianMobile, sanitizeMobile, normalizeMobileForSMS } = require('../utils/validation');
 
 class Fast2SMSService {
   constructor() {
@@ -22,10 +22,12 @@ class Fast2SMSService {
       const cleanMobile = sanitizeMobile(mobile);
       
       if (!isValidIndianMobile(cleanMobile)) {
-        const error = `Invalid Indian mobile number: ${mobile}`;
-        logger.error(error);
-        throw new Error(error);
+        logger.error(`Invalid mobile format for ${type} SMS: ******${cleanMobile.substring(6) || 'XXXX'}`);
+        throw new Error('Invalid mobile number format');
       }
+
+      // Normalize to Fast2SMS format: 91XXXXXXXXXX
+      const normalizedMobile = normalizeMobileForSMS(cleanMobile);
 
       // Log SMS attempt (without exposing full number)
       logger.info(`Sending ${type} SMS to ******${cleanMobile.substring(6)}`);
@@ -36,7 +38,7 @@ class Fast2SMSService {
         message: message,
         language: 'english',
         flash: 0,
-        numbers: cleanMobile
+        numbers: normalizedMobile
       }, {
         headers: {
           'authorization': this.apiKey,

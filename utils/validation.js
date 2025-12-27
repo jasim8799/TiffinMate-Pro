@@ -74,6 +74,28 @@ exports.sanitizeMobile = (mobile) => {
 };
 
 /**
+ * Normalizes Indian mobile number for Fast2SMS API
+ * Converts 10-digit number to 91XXXXXXXXXX format
+ * @param {string} mobile - 10-digit Indian mobile number
+ * @returns {string} - Normalized mobile in 91XXXXXXXXXX format
+ */
+exports.normalizeMobileForSMS = (mobile) => {
+  const cleanMobile = exports.sanitizeMobile(mobile);
+  
+  // If already has country code, return as is
+  if (cleanMobile.startsWith('91') && cleanMobile.length === 12) {
+    return cleanMobile;
+  }
+  
+  // Add country code if 10-digit number
+  if (cleanMobile.length === 10) {
+    return `91${cleanMobile}`;
+  }
+  
+  return cleanMobile;
+};
+
+/**
  * Validates email format
  * @param {string} email - Email to validate
  * @returns {boolean} - True if valid email

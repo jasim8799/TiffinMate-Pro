@@ -49,15 +49,16 @@ exports.login = async (req, res) => {
     if (!user.mobile) {
       return res.status(400).json({
         success: false,
-        message: 'Mobile number not found for this user. Please contact support.'
+        message: 'Invalid registered mobile number. Please contact admin.'
       });
     }
 
-    // Validate Indian mobile number format
+    // Validate Indian mobile number format (10 digits, starts with 6-9)
     if (!/^[6-9]\d{9}$/.test(user.mobile)) {
+      console.error(`User ${user.userId} has invalid mobile format`);
       return res.status(400).json({
         success: false,
-        message: 'Invalid mobile number format. Please contact support to update your mobile number.'
+        message: 'Invalid registered mobile number. Please contact admin.'
       });
     }
 
@@ -69,10 +70,10 @@ exports.login = async (req, res) => {
     const smsResult = await smsService.sendOTP(user.mobile, otp, user._id);
     
     if (!smsResult.success) {
-      console.error(`Failed to send OTP to ${user.mobile}:`, smsResult.error);
+      console.error(`Failed to send OTP for user ${user.userId}:`, smsResult.error);
       return res.status(500).json({
         success: false,
-        message: 'Failed to send OTP. Please try again or contact support.'
+        message: 'Unable to send OTP at this time. Please try again in a moment.'
       });
     }
 
