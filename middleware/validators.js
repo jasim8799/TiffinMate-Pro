@@ -49,19 +49,15 @@ exports.otpValidation = [
 exports.changePasswordValidation = [
   body('oldPassword')
     .notEmpty()
-    .withMessage('Old password is required'),
+    .withMessage('Current password is required'),
   body('newPassword')
     .notEmpty()
     .withMessage('New password is required')
-    .isLength({ min: 6 })
-    .withMessage('New password must be at least 6 characters')
+    .isLength({ min: 8 })
+    .withMessage('Password must be at least 8 characters long')
     .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/)
-    .withMessage('Password must contain at least one uppercase letter, one lowercase letter, and one number'),
-  body('confirmPassword')
-    .notEmpty()
-    .withMessage('Confirm password is required')
-    .custom((value, { req }) => value === req.body.newPassword)
-    .withMessage('Passwords do not match')
+    .withMessage('Password must contain at least one uppercase letter, one lowercase letter, and one number')
+  // NOTE: No confirmPassword required - Flutter app handles confirmation on client side
 ];
 
 exports.accessRequestValidation = [

@@ -168,15 +168,28 @@ exports.verifyOTP = async (req, res) => {
   }
 };
 
-// @desc    Change password (required on first login)
+// @desc    Change password
 // @route   POST /api/auth/change-password
-// @access  Private
+// @access  Private (JWT required)
 exports.changePassword = async (req, res) => {
   try {
     const { oldPassword, newPassword } = req.body;
 
-    // Validate required fields
+    // Strict contract validation - reject extra fields
+    const allowedFields = ['oldPassword', 'newPassword'];
+    const extraFields = Object.keys(req.body).filter(key => !allowedFields.includes(key));
+    
+    if (extraFields.length > 0) {
+      console.log(`Change password request with extra fields: ${extraFields.join(', ')}`);
+      return res.status(400).json({
+        success: false,
+        message: `Unexpected fields: ${extraFields.join(', ')}. Only 'oldPassword' and 'newPassword' are accepted.`
+      });
+    }
+
+    // Validate required fields (backup validation)
     if (!oldPassword) {
+      console.log(`Change password failed: missing oldPassword for user ${req.user._id}`);
       return res.status(400).json({
         success: false,
         message: 'Current password is required'
@@ -184,72 +197,80 @@ exports.changePassword = async (req, res) => {
     }
 
     if (!newPassword) {
+      console.log(`Change password failed: missing newPassword for user ${req.user._id}`);
       return res.status(400).json({
         success: false,
         message: 'New password is required'
       });
     }
 
-    // Validate new password strength
-    if (newPassword.length < 8) {
+    // Password strength validation (simple & realistic)
+    const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/;
+    
+    if (!passwordRegex.test(newPassword)) {
+      console.log(`Change password failed: weak password for user ${req.user._id}`);
+      
+      // Provide specific feedback
+      if (newPassword.length < 8) {
+        return res.status(400).json({
+          success: false,
+          message: 'Password must be at least 8 characters long'
+        });
+      }
+      if (!/[A-Z]/.test(newPassword)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Password must contain at least one uppercase letter'
+        });
+      }
+      if (!/[a-z]/.test(newPassword)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Password must contain at least one lowercase letter'
+        });
+      }
+      if (!/[0-9]/.test(newPassword)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Password must contain at least one number'
+        });
+      }
+      
+      // Fallback generic message
       return res.status(400).json({
         success: false,
-        message: 'Password must be at least 8 characters long'
+        message: 'Password must be at least 8 characters and contain uppercase, lowercase, and number'
       });
     }
 
-    if (!/[A-Z]/.test(newPassword)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Password must contain at least one uppercase letter'
-      });
-    }
-
-    if (!/[a-z]/.test(newPassword)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Password must contain at least one lowercase letter'
-      });
-    }
-
-    if (!/[0-9]/.test(newPassword)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Password must contain at least one number'
-      });
-    }
-
-    if (!/[!@#$%^&*(),.?":{}|<>]/.test(newPassword)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Password must contain at least one special character'
-      });
-    }
-
-    // Fetch user from database
+    // Fetch user from database with password field
     const user = await User.findById(req.user._id).select('+password');
 
     if (!user) {
+      console.error(`Change password failed: user not found with ID ${req.user._id}`);
       return res.status(404).json({
         success: false,
         message: 'User not found'
       });
     }
 
-    // Verify old password
+    // Verify old password using bcrypt.compare
     const isMatch = await user.comparePassword(oldPassword);
 
     if (!isMatch) {
+      console.log(`Change password failed: incorrect old password for user ${user.userId}`);
       return res.status(400).json({
         success: false,
         message: 'Current password is incorrect'
       });
     }
 
-    // Update password (bcrypt hash handled by pre-save hook)
+    // Update password (bcrypt hash handled by User model pre-save hook)
     user.password = newPassword;
     user.isPasswordChanged = true;
     await user.save();
+
+    console.log(`Password changed successfully for user ${user.userId}`);
 
     res.status(200).json({
       success: true,
