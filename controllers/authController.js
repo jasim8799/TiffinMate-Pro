@@ -214,31 +214,64 @@ exports.verifyOTP = async (req, res) => {
 // @access  Private
 exports.changePassword = async (req, res) => {
   try {
-    const { oldPassword, newPassword } = req.body;
+    const { currentPassword, newPassword } = req.body;
 
-    if (!oldPassword || !newPassword) {
+    if (!currentPassword || !newPassword) {
       return res.status(400).json({
         success: false,
-        message: 'Please provide old and new password'
+        message: 'Please provide current password and new password'
       });
     }
 
-    if (newPassword.length < 6) {
+    // Strong password validation
+    if (newPassword.length < 8) {
       return res.status(400).json({
         success: false,
-        message: 'Password must be at least 6 characters'
+        message: 'Password must be at least 8 characters long'
+      });
+    }
+
+    // Check for uppercase
+    if (!/[A-Z]/.test(newPassword)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Password must contain at least one uppercase letter'
+      });
+    }
+
+    // Check for lowercase
+    if (!/[a-z]/.test(newPassword)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Password must contain at least one lowercase letter'
+      });
+    }
+
+    // Check for number
+    if (!/[0-9]/.test(newPassword)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Password must contain at least one number'
+      });
+    }
+
+    // Check for special character
+    if (!/[!@#$%^&*(),.?":{}|<>]/.test(newPassword)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Password must contain at least one special character (!@#$%^&*...)'
       });
     }
 
     const user = await User.findById(req.user._id).select('+password');
 
-    // Verify old password
-    const isMatch = await user.comparePassword(oldPassword);
+    // Verify current password
+    const isMatch = await user.comparePassword(currentPassword);
 
     if (!isMatch) {
       return res.status(401).json({
         success: false,
-        message: 'Old password is incorrect'
+        message: 'Current password is incorrect'
       });
     }
 
