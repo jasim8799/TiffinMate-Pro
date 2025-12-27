@@ -101,6 +101,19 @@ userSchema.methods.generateOTP = function() {
   return otp;
 };
 
+// TEMPORARY: Method to generate DEV OTP for admin testing
+// This bypasses SMS sending for OWNER role during development
+// Remove or disable this in production by setting DEV_OTP_ENABLED=false
+userSchema.methods.generateDevOTP = function() {
+  const devOtp = '111111'; // Fixed OTP for testing
+  this.otp = {
+    code: devOtp,
+    expiry: new Date(Date.now() + parseInt(process.env.OTP_EXPIRY_MINUTES || 2) * 60 * 1000),
+    attempts: 0
+  };
+  return devOtp;
+};
+
 // Method to verify OTP
 userSchema.methods.verifyOTP = function(candidateOTP) {
   if (!this.otp || !this.otp.code) {

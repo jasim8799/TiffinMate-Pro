@@ -62,19 +62,38 @@ exports.login = async (req, res) => {
       });
     }
 
-    // Generate and send OTP
-    const otp = user.generateOTP();
+    // TEMPORARY: Dev OTP for OWNER role testing (bypass SMS)
+    // This allows admin testing without Fast2SMS costs
+    // Customers and delivery agents still use real SMS OTP
+    const isDevOTPEnabled = process.env.DEV_OTP_ENABLED === 'true';
+    const isOwner = user.role.toLowerCase() === 'owner';
+    
+    let otp;
+    let skipSMS = false;
+
+    if (isDevOTPEnabled && isOwner) {
+      // Use fixed dev OTP for admin testing (no SMS sent)
+      otp = user.generateDevOTP();
+      skipSMS = true;
+      console.log(`DEV OTP mode: Fixed OTP generated for admin user ${user.userId}`);
+    } else {
+      // Generate random OTP for customers/delivery or when dev mode disabled
+      otp = user.generateOTP();
+    }
+
     await user.save();
 
-    // Send OTP via SMS to user's registered mobile number
-    const smsResult = await smsService.sendOTP(user.mobile, otp, user._id);
-    
-    if (!smsResult.success) {
-      console.error(`Failed to send OTP for user ${user.userId}:`, smsResult.error);
-      return res.status(500).json({
-        success: false,
-        message: 'Unable to send OTP at this time. Please try again in a moment.'
-      });
+    // Send OTP via SMS (skip for admin in dev mode)
+    if (!skipSMS) {
+      const smsResult = await smsService.sendOTP(user.mobile, otp, user._id);
+      
+      if (!smsResult.success) {
+        console.error(`Failed to send OTP for user ${user.userId}:`, smsResult.error);
+        return res.status(500).json({
+          success: false,
+          message: 'Unable to send OTP at this time. Please try again in a moment.'
+        });
+      }
     }
 
     // Mask mobile number for security (show only last 4 digits)
@@ -123,7 +142,35 @@ exports.verifyOTP = async (req, res) => {
       });
     }
 
-    // Verify OTP
+    // TEMPORARY: Dev OTP verification for admin testing
+    // Accept dev OTP (111111) ONLY for OWNER role when DEV_OTP_ENABLED=true
+    // Reject dev OTP for customers/delivery to ensure they use real SMS
+    const isDevOTPEnabled = process.env.DEV_OTP_ENABLED === 'true';
+    const isOwner = user.role.toLowerCase() === 'owner';
+    const isDevOTP = otp === '111111';
+
+    if (isDevOTP) {
+      // Dev OTP submitted - check if allowed
+      if (!isDevOTPEnabled) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid OTP'
+        });
+      }
+      
+      if (!isOwner) {
+        // Reject dev OTP for non-admin users
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid OTP'
+        });
+      }
+      
+      // Dev OTP is valid for admin in dev mode
+      console.log(`DEV OTP mode: Dev OTP accepted for admin user ${user.userId}`);
+    }
+
+    // Verify OTP (handles both dev and real OTP)
     const verification = user.verifyOTP(otp);
 
     if (!verification.success) {
