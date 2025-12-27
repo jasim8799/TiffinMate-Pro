@@ -325,11 +325,6 @@ exports.changePassword = async (req, res) => {
     });
   }
 };
-      message: 'Error changing password',
-      error: error.message
-    });
-  }
-};
 
 // @desc    Request access (for new users)
 // @route   POST /api/auth/request-access
