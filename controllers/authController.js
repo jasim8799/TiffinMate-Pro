@@ -214,80 +214,117 @@ exports.verifyOTP = async (req, res) => {
 // @access  Private
 exports.changePassword = async (req, res) => {
   try {
-    const { currentPassword, newPassword } = req.body;
+    console.log('Change password request received');
+    console.log('Request body keys:', Object.keys(req.body));
+    console.log('User ID from JWT:', req.user?._id);
 
-    if (!currentPassword || !newPassword) {
+    const { oldPassword, newPassword } = req.body;
+
+    // Validate required fields
+    if (!oldPassword) {
+      console.log('Validation failed: oldPassword missing');
       return res.status(400).json({
         success: false,
-        message: 'Please provide current password and new password'
+        message: 'Current password is required'
       });
     }
 
-    // Strong password validation
+    if (!newPassword) {
+      console.log('Validation failed: newPassword missing');
+      return res.status(400).json({
+        success: false,
+        message: 'New password is required'
+      });
+    }
+
+    // Validate new password strength
     if (newPassword.length < 8) {
+      console.log('Validation failed: password too short');
       return res.status(400).json({
         success: false,
         message: 'Password must be at least 8 characters long'
       });
     }
 
-    // Check for uppercase
     if (!/[A-Z]/.test(newPassword)) {
+      console.log('Validation failed: no uppercase letter');
       return res.status(400).json({
         success: false,
         message: 'Password must contain at least one uppercase letter'
       });
     }
 
-    // Check for lowercase
     if (!/[a-z]/.test(newPassword)) {
+      console.log('Validation failed: no lowercase letter');
       return res.status(400).json({
         success: false,
         message: 'Password must contain at least one lowercase letter'
       });
     }
 
-    // Check for number
     if (!/[0-9]/.test(newPassword)) {
+      console.log('Validation failed: no number');
       return res.status(400).json({
         success: false,
         message: 'Password must contain at least one number'
       });
     }
 
-    // Check for special character
     if (!/[!@#$%^&*(),.?":{}|<>]/.test(newPassword)) {
+      console.log('Validation failed: no special character');
       return res.status(400).json({
         success: false,
         message: 'Password must contain at least one special character (!@#$%^&*...)'
       });
     }
 
+    // Fetch user from database
     const user = await User.findById(req.user._id).select('+password');
 
-    // Verify current password
-    const isMatch = await user.comparePassword(currentPassword);
+    if (!user) {
+      console.log('User not found in database');
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    console.log('User found, verifying old password');
+
+    // Verify old password using bcrypt
+    const isMatch = await user.comparePassword(oldPassword);
 
     if (!isMatch) {
-      return res.status(401).json({
+      console.log('Old password verification failed');
+      return res.status(400).json({
         success: false,
         message: 'Current password is incorrect'
       });
     }
 
-    // Update password
+    console.log('Old password verified, updating to new password');
+
+    // Update password (will be hashed by pre-save hook)
     user.password = newPassword;
     user.isPasswordChanged = true;
     await user.save();
+
+    console.log('Password changed successfully for user:', user.userId);
 
     res.status(200).json({
       success: true,
       message: 'Password changed successfully'
     });
   } catch (error) {
-    console.error('Change password error:', error);
+    console.error('Change password error:', error.message);
+    console.error('Stack trace:', error.stack);
     res.status(500).json({
       success: false,
+      message: 'Error changing password. Please try again.',
+      error: error.message
+    });
+  }
+};
       message: 'Error changing password',
       error: error.message
     });
