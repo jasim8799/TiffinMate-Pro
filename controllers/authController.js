@@ -45,19 +45,46 @@ exports.login = async (req, res) => {
       });
     }
 
+    // Validate mobile number exists
+    if (!user.mobile) {
+      return res.status(400).json({
+        success: false,
+        message: 'Mobile number not found for this user. Please contact support.'
+      });
+    }
+
+    // Validate Indian mobile number format
+    if (!/^[6-9]\d{9}$/.test(user.mobile)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid mobile number format. Please contact support to update your mobile number.'
+      });
+    }
+
     // Generate and send OTP
     const otp = user.generateOTP();
     await user.save();
 
-    // Send OTP via SMS
-    await smsService.sendOTP(user.mobile, otp, user._id);
+    // Send OTP via SMS to user's registered mobile number
+    const smsResult = await smsService.sendOTP(user.mobile, otp, user._id);
+    
+    if (!smsResult.success) {
+      console.error(`Failed to send OTP to ${user.mobile}:`, smsResult.error);
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to send OTP. Please try again or contact support.'
+      });
+    }
+
+    // Mask mobile number for security (show only last 4 digits)
+    const maskedMobile = user.mobile.replace(/^(\d{6})(\d{4})$/, '******$2');
 
     res.status(200).json({
       success: true,
-      message: 'OTP sent successfully',
+      message: `OTP sent successfully to ${maskedMobile}`,
       data: {
         userId: user.userId,
-        mobile: user.mobile,
+        mobile: maskedMobile,
         otpExpiry: user.otp.expiry,
         requiresPasswordChange: !user.isPasswordChanged
       }

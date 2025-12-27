@@ -1,5 +1,7 @@
 const axios = require('axios');
 const NotificationLog = require('../models/NotificationLog');
+const logger = require('../utils/logger');
+const { isValidIndianMobile, sanitizeMobile } = require('../utils/validation');
 
 class Fast2SMSService {
   constructor() {
@@ -9,9 +11,24 @@ class Fast2SMSService {
 
   async sendSMS(mobile, message, type = 'other', userId = null) {
     try {
+      // Validate API key
       if (!this.apiKey) {
-        throw new Error('Fast2SMS API key not configured');
+        const error = 'Fast2SMS API key not configured in environment variables';
+        logger.error(error);
+        throw new Error(error);
       }
+
+      // Sanitize and validate mobile number
+      const cleanMobile = sanitizeMobile(mobile);
+      
+      if (!isValidIndianMobile(cleanMobile)) {
+        const error = `Invalid Indian mobile number: ${mobile}`;
+        logger.error(error);
+        throw new Error(error);
+      }
+
+      // Log SMS attempt (without exposing full number)
+      logger.info(`Sending ${type} SMS to ******${cleanMobile.substring(6)}`);
 
       const response = await axios.post(this.baseURL, {
         route: 'v3',
@@ -19,44 +36,58 @@ class Fast2SMSService {
         message: message,
         language: 'english',
         flash: 0,
-        numbers: mobile
+        numbers: cleanMobile
       }, {
         headers: {
           'authorization': this.apiKey,
           'Content-Type': 'application/json'
-        }
+        },
+        timeout: 10000 // 10 second timeout
       });
 
-      // Log notification
+      // Check if SMS was sent successfully
+      const success = response.data && response.data.return === true;
+
+      // Log notification in database
       if (userId) {
         await NotificationLog.create({
           user: userId,
-          mobile: mobile,
+          mobile: cleanMobile,
           type: type,
           message: message,
-          status: response.data.return ? 'sent' : 'failed',
+          status: success ? 'sent' : 'failed',
           response: response.data,
           sentAt: new Date()
         });
       }
 
+      if (success) {
+        logger.success(`${type} SMS sent successfully to ******${cleanMobile.substring(6)}`);
+      } else {
+        logger.warn(`SMS may have failed: ${JSON.stringify(response.data)}`);
+      }
+
       return {
-        success: true,
+        success: success,
         data: response.data
       };
     } catch (error) {
-      console.error('Fast2SMS Error:', error.message);
+      logger.error(`Fast2SMS Error (${type}):`, error);
 
-      // Log failed notification
-      if (userId) {
-        await NotificationLog.create({
-          user: userId,
-          mobile: mobile,
-          type: type,
-          message: message,
-          status: 'failed',
-          errorMessage: error.message
-        });
+      // Log failed notification in database
+      if (userId && mobile) {
+        try {
+          await NotificationLog.create({
+            user: userId,
+            mobile: sanitizeMobile(mobile),
+            type: type,
+            message: message,
+            status: 'failed',
+            errorMessage: error.message
+          });
+        } catch (logError) {
+          logger.error('Failed to log SMS error:', logError);
+        }
       }
 
       return {
@@ -67,7 +98,19 @@ class Fast2SMSService {
   }
 
   async sendOTP(mobile, otp, userId) {
-    const message = `Your TiffinMate OTP is ${otp}. Valid for ${process.env.OTP_EXPIRY_MINUTES || 2} minutes. Do not share with anyone.`;
+    // Validate OTP format
+    if (!/^\d{6}$/.test(otp)) {
+      logger.error(`Invalid OTP format: ${otp}`);
+      return {
+        success: false,
+        error: 'Invalid OTP format'
+      };
+    }
+
+    const expiryMinutes = process.env.OTP_EXPIRY_MINUTES || 2;
+    const message = `Your TiffinMate OTP is ${otp}. Valid for ${expiryMinutes} minutes. Do not share with anyone.`;
+    
+    logger.info(`Generating OTP for user ${userId}`);
     return await this.sendSMS(mobile, message, 'otp', userId);
   }
 

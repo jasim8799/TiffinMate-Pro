@@ -19,9 +19,16 @@ const userSchema = new mongoose.Schema({
   },
   mobile: {
     type: String,
-    required: true,
+    required: [true, 'Mobile number is required'],
     unique: true,
-    trim: true
+    trim: true,
+    validate: {
+      validator: function(v) {
+        // Indian mobile number validation: 10 digits, starts with 6-9
+        return /^[6-9]\d{9}$/.test(v);
+      },
+      message: props => `${props.value} is not a valid Indian mobile number! Must be 10 digits starting with 6-9.`
+    }
   },
   address: {
     street: String,
