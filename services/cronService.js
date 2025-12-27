@@ -3,13 +3,19 @@ const Subscription = require('../models/Subscription');
 const User = require('../models/User');
 const Payment = require('../models/Payment');
 const smsService = require('./smsService');
+const logger = require('../utils/logger');
 const moment = require('moment');
 
 class CronService {
+  constructor() {
+    this.jobs = [];
+  }
+
   // Check for subscriptions expiring in 2 days
   checkExpiringSubscriptions() {
-    return cron.schedule('0 9 * * *', async () => {
-      console.log('🔔 Running expiring subscriptions check...');
+    const job = cron.schedule('0 9 * * *', async () => {
+      const jobName = 'Check Expiring Subscriptions';
+      logger.info(`Running: ${jobName}`);
       
       try {
         const twoDaysFromNow = moment().add(2, 'days').endOf('day').toDate();
@@ -21,32 +27,42 @@ class CronService {
           expiryReminderSent: false
         }).populate('user');
 
+        let sentCount = 0;
         for (const subscription of expiringSubscriptions) {
-          const user = subscription.user;
-          const daysRemaining = Math.ceil((subscription.endDate - new Date()) / (1000 * 60 * 60 * 24));
+          try {
+            const user = subscription.user;
+            const daysRemaining = Math.ceil((subscription.endDate - new Date()) / (1000 * 60 * 60 * 24));
 
-          await smsService.sendSubscriptionReminder(
-            user.mobile,
-            user.name,
-            daysRemaining,
-            user._id
-          );
+            await smsService.sendSubscriptionReminder(
+              user.mobile,
+              user.name,
+              daysRemaining,
+              user._id
+            );
 
-          subscription.expiryReminderSent = true;
-          await subscription.save();
+            subscription.expiryReminderSent = true;
+            await subscription.save();
+            sentCount++;
+          } catch (err) {
+            logger.error(`Failed to send reminder for subscription ${subscription._id}`, err);
+          }
         }
 
-        console.log(`✅ Sent ${expiringSubscriptions.length} expiry reminders`);
+        logger.success(`${jobName} completed: ${sentCount}/${expiringSubscriptions.length} reminders sent`);
       } catch (error) {
-        console.error('❌ Error in expiring subscriptions check:', error);
+        logger.error(`${jobName} failed`, error);
       }
     });
+
+    this.jobs.push({ name: 'checkExpiringSubscriptions', job });
+    return job;
   }
 
   // Check for expired subscriptions
   checkExpiredSubscriptions() {
-    return cron.schedule('0 10 * * *', async () => {
-      console.log('🔔 Running expired subscriptions check...');
+    const job = cron.schedule('0 10 * * *', async () => {
+      const jobName = 'Check Expired Subscriptions';
+      logger.info(`Running: ${jobName}`);
       
       try {
         const today = new Date();
@@ -58,31 +74,41 @@ class CronService {
           expiryWarningSent: false
         }).populate('user');
 
+        let markedCount = 0;
         for (const subscription of expiredSubscriptions) {
-          const user = subscription.user;
+          try {
+            const user = subscription.user;
 
-          await smsService.sendSubscriptionExpiry(
-            user.mobile,
-            user.name,
-            user._id
-          );
+            await smsService.sendSubscriptionExpiry(
+              user.mobile,
+              user.name,
+              user._id
+            );
 
-          subscription.status = 'expired';
-          subscription.expiryWarningSent = true;
-          await subscription.save();
+            subscription.status = 'expired';
+            subscription.expiryWarningSent = true;
+            await subscription.save();
+            markedCount++;
+          } catch (err) {
+            logger.error(`Failed to mark subscription ${subscription._id} as expired`, err);
+          }
         }
 
-        console.log(`✅ Marked ${expiredSubscriptions.length} subscriptions as expired`);
+        logger.success(`${jobName} completed: ${markedCount}/${expiredSubscriptions.length} subscriptions marked as expired`);
       } catch (error) {
-        console.error('❌ Error in expired subscriptions check:', error);
+        logger.error(`${jobName} failed`, error);
       }
     });
+
+    this.jobs.push({ name: 'checkExpiredSubscriptions', job });
+    return job;
   }
 
   // Auto-disable service 1 day after expiry
   autoDisableExpiredSubscriptions() {
-    return cron.schedule('0 11 * * *', async () => {
-      console.log('🔔 Running auto-disable check...');
+    const job = cron.schedule('0 11 * * *', async () => {
+      const jobName = 'Auto-Disable Expired Subscriptions';
+      logger.info(`Running: ${jobName}`);
       
       try {
         const oneDayAgo = moment().subtract(1, 'day').endOf('day').toDate();
@@ -93,36 +119,45 @@ class CronService {
           disableReminderSent: false
         }).populate('user');
 
+        let disabledCount = 0;
         for (const subscription of subscriptionsToDisable) {
-          const user = subscription.user;
+          try {
+            const user = subscription.user;
 
-          // Disable user account
-          user.isActive = false;
-          await user.save();
+            // Disable user account
+            user.isActive = false;
+            await user.save();
 
-          // Send SMS notification
-          await smsService.sendServiceDisabled(
-            user.mobile,
-            user.name,
-            user._id
-          );
+            await smsService.sendServiceDisabled(
+              user.mobile,
+              user.name,
+              user._id
+            );
 
-          subscription.status = 'disabled';
-          subscription.disableReminderSent = true;
-          await subscription.save();
+            subscription.status = 'disabled';
+            subscription.disableReminderSent = true;
+            await subscription.save();
+            disabledCount++;
+          } catch (err) {
+            logger.error(`Failed to disable subscription ${subscription._id}`, err);
+          }
         }
 
-        console.log(`✅ Disabled ${subscriptionsToDisable.length} services`);
+        logger.success(`${jobName} completed: ${disabledCount}/${subscriptionsToDisable.length} accounts disabled`);
       } catch (error) {
-        console.error('❌ Error in auto-disable check:', error);
+        logger.error(`${jobName} failed`, error);
       }
     });
+
+    this.jobs.push({ name: 'autoDisableExpiredSubscriptions', job });
+    return job;
   }
 
   // Check for overdue payments
   checkOverduePayments() {
-    return cron.schedule('0 12 * * *', async () => {
-      console.log('🔔 Running overdue payments check...');
+    const job = cron.schedule('0 12 * * *', async () => {
+      const jobName = 'Check Overdue Payments';
+      logger.info(`Running: ${jobName}`);
       
       try {
         const today = new Date();
@@ -132,44 +167,63 @@ class CronService {
           dueDate: { $lt: today }
         }).populate('user');
 
+        let reminderCount = 0;
         for (const payment of overduePayments) {
-          const user = payment.user;
-          
-          // Send reminder if not sent today
-          const lastReminder = payment.lastReminderDate;
-          if (!lastReminder || moment(lastReminder).isBefore(moment(), 'day')) {
-            await smsService.sendPaymentOverdue(
-              user.mobile,
-              user.name,
-              payment.pendingAmount,
-              user._id
-            );
+          try {
+            const user = payment.user;
+            
+            // Send reminder if not sent today
+            const lastReminder = payment.lastReminderDate;
+            if (!lastReminder || moment(lastReminder).isBefore(moment(), 'day')) {
+              await smsService.sendPaymentOverdue(
+                user.mobile,
+                user.name,
+                payment.pendingAmount,
+                user._id
+              );
 
-            payment.paymentStatus = 'overdue';
-            payment.reminderSent = true;
-            payment.reminderCount += 1;
-            payment.lastReminderDate = new Date();
-            await payment.save();
+              payment.paymentStatus = 'overdue';
+              payment.reminderSent = true;
+              payment.reminderCount += 1;
+              payment.lastReminderDate = new Date();
+              await payment.save();
+              reminderCount++;
+            }
+          } catch (err) {
+            logger.error(`Failed to send overdue reminder for payment ${payment._id}`, err);
           }
         }
 
-        console.log(`✅ Sent ${overduePayments.length} overdue payment reminders`);
+        logger.success(`${jobName} completed: ${reminderCount} overdue payment reminders sent`);
       } catch (error) {
-        console.error('❌ Error in overdue payments check:', error);
+        logger.error(`${jobName} failed`, error);
       }
     });
+
+    this.jobs.push({ name: 'checkOverduePayments', job });
+    return job;
   }
 
   // Start all cron jobs
   startAllJobs() {
-    console.log('⏰ Starting cron jobs...');
+    logger.info('Starting all cron jobs...');
     
     this.checkExpiringSubscriptions();
     this.checkExpiredSubscriptions();
     this.autoDisableExpiredSubscriptions();
     this.checkOverduePayments();
     
-    console.log('✅ All cron jobs started');
+    logger.success(`All ${this.jobs.length} cron jobs started successfully`);
+  }
+
+  // Stop all cron jobs (for graceful shutdown)
+  stopAllJobs() {
+    logger.info('Stopping all cron jobs...');
+    this.jobs.forEach(({ name, job }) => {
+      job.stop();
+      logger.info(`Stopped: ${name}`);
+    });
+    this.jobs = [];
   }
 }
 
