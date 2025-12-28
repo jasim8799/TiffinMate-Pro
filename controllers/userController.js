@@ -1,4 +1,134 @@
 const User = require('../models/User');
+const smsService = require('../services/smsService');
+
+// Helper function to generate unique customer userId
+const generateCustomerId = async () => {
+  try {
+    // Find the last customer by userId
+    const lastCustomer = await User.findOne({ 
+      userId: /^CUST\d+$/ 
+    }).sort({ userId: -1 });
+
+    let nextNumber = 1001; // Starting number
+
+    if (lastCustomer && lastCustomer.userId) {
+      const lastNumber = parseInt(lastCustomer.userId.replace('CUST', ''));
+      if (!isNaN(lastNumber)) {
+        nextNumber = lastNumber + 1;
+      }
+    }
+
+    return `CUST${nextNumber}`;
+  } catch (error) {
+    console.error('Error generating customer ID:', error);
+    // Fallback to timestamp-based ID if error occurs
+    return `CUST${Date.now().toString().slice(-4)}`;
+  }
+};
+
+// Helper function to generate temporary password
+const generateTempPassword = () => {
+  return Math.floor(100000 + Math.random() * 900000).toString(); // 6-digit password
+};
+
+// @desc    Create new customer (Owner only)
+// @route   POST /api/users/create
+// @access  Private (Owner only)
+exports.createCustomer = async (req, res) => {
+  try {
+    const { name, mobile, address, landmark, plan, mealType, duration } = req.body;
+
+    // Validate required fields
+    if (!name || !mobile) {
+      return res.status(400).json({
+        success: false,
+        message: 'Name and mobile number are required'
+      });
+    }
+
+    // Check if mobile already exists
+    const existingUser = await User.findOne({ mobile });
+    if (existingUser) {
+      return res.status(400).json({
+        success: false,
+        message: 'Mobile number already registered'
+      });
+    }
+
+    // Generate unique userId
+    const userId = await generateCustomerId();
+
+    // Generate temporary password
+    const tempPassword = generateTempPassword();
+
+    // Create user object
+    const userData = {
+      userId,
+      password: tempPassword,
+      name,
+      mobile,
+      role: 'customer',
+      isActive: true,
+      forcePasswordChange: true,
+      createdBy: req.user._id
+    };
+
+    // Add address if provided
+    if (address || landmark) {
+      userData.address = {
+        street: address || '',
+        landmark: landmark || ''
+      };
+    }
+
+    // Create user in database
+    const user = await User.create(userData);
+
+    // Send SMS with credentials
+    try {
+      const smsMessage = `Welcome to TiffinMate! Your User ID is ${userId} and Temporary Password is ${tempPassword}. Please login and change your password.`;
+      
+      await smsService.sendSMS(
+        mobile,
+        smsMessage,
+        'customer_creation',
+        user._id
+      );
+    } catch (smsError) {
+      console.error('SMS sending failed:', smsError);
+      // Continue even if SMS fails - owner can manually share credentials
+    }
+
+    // Return success response (without password)
+    res.status(201).json({
+      success: true,
+      message: 'Customer created successfully',
+      data: {
+        userId,
+        tempPassword, // Return for owner to share with customer
+        name,
+        mobile
+      }
+    });
+
+  } catch (error) {
+    console.error('Create customer error:', error);
+    
+    // Handle duplicate userId error (edge case)
+    if (error.code === 11000 && error.keyPattern && error.keyPattern.userId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Failed to generate unique user ID. Please try again.'
+      });
+    }
+
+    res.status(500).json({
+      success: false,
+      message: 'Error creating customer',
+      error: error.message
+    });
+  }
+};
 
 // @desc    Get all users
 // @route   GET /api/users

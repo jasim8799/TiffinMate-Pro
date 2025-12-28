@@ -50,6 +50,10 @@ const userSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
+  forcePasswordChange: {
+    type: Boolean,
+    default: true  // New users must change password on first login
+  },
   otp: {
     code: String,
     expiry: Date,
