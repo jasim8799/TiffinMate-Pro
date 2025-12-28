@@ -65,12 +65,18 @@ exports.login = async (req, res) => {
     // Generate random 6-digit OTP (now async - returns plain OTP to send)
     const otp = await user.generateOTP();
     await user.save();
+    
+    console.log(`🔐 OTP GENERATED for ${user.userId}: ${otp}`);
+    console.log(`📱 Sending OTP to mobile: ${user.mobile}`);
+    console.log(`⏰ OTP expires at: ${user.otp.expiry}`);
 
     // Send OTP via Fast2SMS Quick Transactional Route
     const smsResult = await smsService.sendOTP(user.mobile, otp, user._id);
     
+    console.log(`📨 SMS Result:`, smsResult);
+    
     if (!smsResult.success) {
-      console.error(`Failed to send OTP for user ${user.userId}:`, smsResult.error);
+      console.error(`❌ Failed to send OTP for user ${user.userId}:`, smsResult.error);
       
       // Clear OTP from user since SMS failed
       user.otp = undefined;
@@ -79,9 +85,12 @@ exports.login = async (req, res) => {
       // Return HTTP 503 (Service Unavailable) for SMS failures
       return res.status(503).json({
         success: false,
-        message: 'OTP service unavailable. Please try again later.'
+        message: 'OTP service unavailable. Please try again later.',
+        debug: process.env.NODE_ENV === 'development' ? smsResult : undefined
       });
     }
+    
+    console.log(`✅ OTP sent successfully to ${user.mobile}`);
 
     // Mask mobile number for security (show only last 4 digits)
     const maskedMobile = user.mobile.replace(/^(\d{6})(\d{4})$/, '******$2');
