@@ -14,15 +14,34 @@ const paymentSchema = new mongoose.Schema({
     type: Number,
     required: true
   },
+  paymentMethod: {
+    type: String,
+    enum: ['upi', 'cash', 'other'],
+    default: 'upi'
+  },
+  status: {
+    type: String,
+    enum: ['pending', 'verified', 'rejected'],
+    default: 'pending'
+  },
+  referenceNote: {
+    type: String,
+    trim: true
+  },
+  paymentDate: {
+    type: Date,
+    default: Date.now
+  },
+  verifiedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  },
+  verifiedAt: Date,
+  // Legacy fields for backward compatibility
   paymentType: {
     type: String,
     enum: ['subscription', 'extra-tiffin', 'other'],
     default: 'subscription'
-  },
-  paymentMethod: {
-    type: String,
-    enum: ['cash', 'upi', 'other'],
-    required: true
   },
   paymentStatus: {
     type: String,
@@ -37,7 +56,6 @@ const paymentSchema = new mongoose.Schema({
     type: Number,
     default: 0
   },
-  paymentDate: Date,
   dueDate: Date,
   upiScreenshot: String,
   transactionId: String,

@@ -1,45 +1,69 @@
 const Payment = require('../models/Payment');
 const Subscription = require('../models/Subscription');
 const User = require('../models/User');
-const upload = require('../middleware/upload');
+const moment = require('moment');
 
-// @desc    Create payment record
-// @route   POST /api/payments
-// @access  Private (Owner only)
+// UPI Configuration
+const UPI_CONFIG = {
+  upiId: process.env.UPI_ID || 'thehomekitchen@upi',
+  name: process.env.UPI_NAME || 'The Home Kitchen'
+};
+
+// ====================================
+// USER ENDPOINTS (Customer)
+// ====================================
+
+// @desc    Create payment (User initiates payment)
+// @route   POST /api/payments/create
+// @access  Private (Customer only)
 exports.createPayment = async (req, res) => {
   try {
-    const {
-      userId,
-      subscriptionId,
-      amount,
-      paymentType,
-      paymentMethod,
-      dueDate,
-      notes
-    } = req.body;
+    const { subscriptionId, amount, referenceNote } = req.body;
 
-    if (!userId || !amount || !paymentMethod) {
+    if (!subscriptionId || !amount) {
       return res.status(400).json({
         success: false,
-        message: 'Please provide all required fields'
+        message: 'Subscription ID and amount are required'
       });
     }
 
+    // Validate subscription exists and belongs to user
+    const subscription = await Subscription.findOne({
+      _id: subscriptionId,
+      user: req.user._id
+    });
+
+    if (!subscription) {
+      return res.status(404).json({
+        success: false,
+        message: 'Subscription not found'
+      });
+    }
+
+    // Create payment record
     const payment = await Payment.create({
-      user: userId,
+      user: req.user._id,
       subscription: subscriptionId,
       amount,
-      paymentType: paymentType || 'subscription',
-      paymentMethod,
-      dueDate: dueDate || new Date(),
-      notes,
-      markedBy: req.user._id
+      paymentMethod: 'upi',
+      status: 'pending',
+      referenceNote: referenceNote || '',
+      paymentDate: new Date()
     });
+
+    // Generate UPI QR string
+    const upiString = `upi://pay?pa=${UPI_CONFIG.upiId}&pn=${encodeURIComponent(UPI_CONFIG.name)}&am=${amount}&cu=INR`;
 
     res.status(201).json({
       success: true,
-      message: 'Payment record created successfully',
-      data: payment
+      message: 'Payment created successfully. Please complete the UPI payment.',
+      data: {
+        paymentId: payment._id,
+        upiId: UPI_CONFIG.upiId,
+        name: UPI_CONFIG.name,
+        amount,
+        qrString: upiString
+      }
     });
   } catch (error) {
     console.error('Create payment error:', error);
@@ -51,7 +75,198 @@ exports.createPayment = async (req, res) => {
   }
 };
 
-// @desc    Mark payment as paid
+// @desc    Get my payments (User's payment history)
+// @route   GET /api/payments/my
+// @access  Private (Customer only)
+exports.getMyPayments = async (req, res) => {
+  try {
+    const payments = await Payment.find({ user: req.user._id })
+      .populate('subscription', 'planType startDate endDate totalDays')
+      .populate('verifiedBy', 'name')
+      .sort({ createdAt: -1 });
+
+    res.status(200).json({
+      success: true,
+      count: payments.length,
+      data: payments
+    });
+  } catch (error) {
+    console.error('Get my payments error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching payments',
+      error: error.message
+    });
+  }
+};
+
+// ====================================
+// OWNER ENDPOINTS
+// ====================================
+
+// @desc    Get pending payments (Awaiting verification)
+// @route   GET /api/payments/pending
+// @access  Private (Owner only)
+exports.getPendingPayments = async (req, res) => {
+  try {
+    const payments = await Payment.find({ status: 'pending' })
+      .populate('user', 'name mobile userId')
+      .populate('subscription', 'planType startDate endDate')
+      .sort({ createdAt: -1 });
+
+    res.status(200).json({
+      success: true,
+      count: payments.length,
+      data: payments
+    });
+  } catch (error) {
+    console.error('Get pending payments error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching pending payments',
+      error: error.message
+    });
+  }
+};
+
+// @desc    Verify or reject payment
+// @route   PUT /api/payments/:id/verify
+// @access  Private (Owner only)
+exports.verifyPayment = async (req, res) => {
+  try {
+    const { status } = req.body;
+
+    if (!status || !['verified', 'rejected'].includes(status)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Status must be either "verified" or "rejected"'
+      });
+    }
+
+    const payment = await Payment.findById(req.params.id)
+      .populate('subscription');
+
+    if (!payment) {
+      return res.status(404).json({
+        success: false,
+        message: 'Payment not found'
+      });
+    }
+
+    if (payment.status !== 'pending') {
+      return res.status(400).json({
+        success: false,
+        message: 'Payment has already been processed'
+      });
+    }
+
+    // Update payment status
+    payment.status = status;
+    payment.verifiedBy = req.user._id;
+    payment.verifiedAt = new Date();
+    await payment.save();
+
+    // If verified, activate or extend subscription
+    if (status === 'verified' && payment.subscription) {
+      const subscription = payment.subscription;
+
+      if (subscription.status === 'pending') {
+        // First payment - activate subscription
+        subscription.status = 'active';
+        subscription.startDate = moment().startOf('day').toDate();
+        subscription.endDate = moment()
+          .add(subscription.totalDays - 1, 'days')
+          .endOf('day')
+          .toDate();
+      } else if (subscription.status === 'active' || subscription.status === 'expired') {
+        // Renewal - extend subscription
+        const currentEndDate = subscription.endDate;
+        const isExpired = moment().isAfter(currentEndDate);
+
+        if (isExpired) {
+          // Start fresh from today
+          subscription.startDate = moment().startOf('day').toDate();
+          subscription.endDate = moment()
+            .add(subscription.totalDays - 1, 'days')
+            .endOf('day')
+            .toDate();
+          subscription.status = 'active';
+        } else {
+          // Extend from current end date
+          subscription.endDate = moment(currentEndDate)
+            .add(subscription.totalDays, 'days')
+            .endOf('day')
+            .toDate();
+        }
+      }
+
+      await subscription.save();
+    }
+
+    const populatedPayment = await Payment.findById(payment._id)
+      .populate('user', 'name mobile userId')
+      .populate('subscription', 'planType startDate endDate status')
+      .populate('verifiedBy', 'name');
+
+    res.status(200).json({
+      success: true,
+      message: status === 'verified' 
+        ? 'Payment verified and subscription updated successfully'
+        : 'Payment rejected',
+      data: populatedPayment
+    });
+  } catch (error) {
+    console.error('Verify payment error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error verifying payment',
+      error: error.message
+    });
+  }
+};
+
+// @desc    Get all payments (Owner view with filters)
+// @route   GET /api/payments/all
+// @access  Private (Owner only)
+exports.getAllPayments = async (req, res) => {
+  try {
+    const { status, userId } = req.query;
+    const filter = {};
+
+    if (status) {
+      filter.status = status;
+    }
+
+    if (userId) {
+      filter.user = userId;
+    }
+
+    const payments = await Payment.find(filter)
+      .populate('user', 'name mobile userId')
+      .populate('subscription', 'planType startDate endDate')
+      .populate('verifiedBy', 'name')
+      .sort({ createdAt: -1 });
+
+    res.status(200).json({
+      success: true,
+      count: payments.length,
+      data: payments
+    });
+  } catch (error) {
+    console.error('Get all payments error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching payments',
+      error: error.message
+    });
+  }
+};
+
+// ====================================
+// LEGACY ENDPOINTS (For backward compatibility)
+// ====================================
+
+// @desc    Mark payment as paid (Legacy - Owner creates payment record)
 // @route   PATCH /api/payments/:id/mark-paid
 // @access  Private (Owner only)
 exports.markPaymentPaid = async (req, res) => {
@@ -71,6 +286,7 @@ exports.markPaymentPaid = async (req, res) => {
     payment.paymentDate = paymentDate || new Date();
     payment.transactionId = transactionId;
     payment.markedBy = req.user._id;
+    payment.paymentStatus = 'paid';
 
     await payment.save();
 
@@ -89,7 +305,7 @@ exports.markPaymentPaid = async (req, res) => {
   }
 };
 
-// @desc    Upload UPI screenshot
+// @desc    Upload UPI screenshot (Legacy)
 // @route   POST /api/payments/:id/upload-screenshot
 // @access  Private (Customer)
 exports.uploadUPIScreenshot = async (req, res) => {
@@ -111,7 +327,7 @@ exports.uploadUPIScreenshot = async (req, res) => {
     }
 
     payment.upiScreenshot = req.file.path;
-    payment.paymentStatus = 'pending'; // Awaiting verification
+    payment.paymentStatus = 'pending';
     await payment.save();
 
     res.status(200).json({
@@ -129,7 +345,7 @@ exports.uploadUPIScreenshot = async (req, res) => {
   }
 };
 
-// @desc    Get user's payments
+// @desc    Get user's payments (Legacy - by userId)
 // @route   GET /api/payments/user/:userId
 // @access  Private
 exports.getUserPayments = async (req, res) => {
@@ -153,62 +369,6 @@ exports.getUserPayments = async (req, res) => {
   }
 };
 
-// @desc    Get my payments
-// @route   GET /api/payments/my
-// @access  Private (Customer)
-exports.getMyPayments = async (req, res) => {
-  try {
-    const payments = await Payment.find({ user: req.user._id })
-      .populate('subscription', 'planType startDate endDate')
-      .sort({ createdAt: -1 });
-
-    res.status(200).json({
-      success: true,
-      count: payments.length,
-      data: payments
-    });
-  } catch (error) {
-    console.error('Get my payments error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Error fetching payments',
-      error: error.message
-    });
-  }
-};
-
-// @desc    Get all payments (admin)
-// @route   GET /api/payments
-// @access  Private (Owner only)
-exports.getAllPayments = async (req, res) => {
-  try {
-    const { paymentStatus } = req.query;
-    const filter = {};
-
-    if (paymentStatus) {
-      filter.paymentStatus = paymentStatus;
-    }
-
-    const payments = await Payment.find(filter)
-      .populate('user', 'name mobile userId')
-      .populate('subscription', 'planType')
-      .sort({ createdAt: -1 });
-
-    res.status(200).json({
-      success: true,
-      count: payments.length,
-      data: payments
-    });
-  } catch (error) {
-    console.error('Get all payments error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Error fetching payments',
-      error: error.message
-    });
-  }
-};
-
 // @desc    Get payment details
 // @route   GET /api/payments/:id
 // @access  Private
@@ -216,7 +376,8 @@ exports.getPayment = async (req, res) => {
   try {
     const payment = await Payment.findById(req.params.id)
       .populate('user', 'name mobile userId address')
-      .populate('subscription', 'planType startDate endDate');
+      .populate('subscription', 'planType startDate endDate')
+      .populate('verifiedBy', 'name');
 
     if (!payment) {
       return res.status(404).json({

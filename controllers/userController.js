@@ -1,6 +1,105 @@
 const User = require('../models/User');
 const smsService = require('../services/smsService');
 
+// @desc    Get my profile (logged-in user)
+// @route   GET /api/users/me
+// @access  Private (JWT required)
+exports.getMyProfile = async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id).select('-password -otp');
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      data: {
+        _id: user._id,
+        userId: user.userId,
+        name: user.name,
+        mobile: user.mobile,
+        role: user.role,
+        isActive: user.isActive,
+        address: user.address,
+        createdAt: user.createdAt
+      }
+    });
+  } catch (error) {
+    console.error('Get my profile error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching profile',
+      error: error.message
+    });
+  }
+};
+
+// @desc    Update my profile (logged-in user)
+// @route   PUT /api/users/me
+// @access  Private (JWT required)
+exports.updateMyProfile = async (req, res) => {
+  try {
+    const { name } = req.body;
+
+    // Only name can be updated
+    if (!name) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please provide name to update'
+      });
+    }
+
+    // Validate name length
+    if (name.trim().length < 2) {
+      return res.status(400).json({
+        success: false,
+        message: 'Name must be at least 2 characters long'
+      });
+    }
+
+    if (name.length > 50) {
+      return res.status(400).json({
+        success: false,
+        message: 'Name must not exceed 50 characters'
+      });
+    }
+
+    const user = await User.findById(req.user._id);
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    user.name = name.trim();
+    await user.save();
+
+    res.status(200).json({
+      success: true,
+      message: 'Profile updated successfully',
+      data: {
+        userId: user.userId,
+        name: user.name,
+        mobile: user.mobile,
+        role: user.role
+      }
+    });
+  } catch (error) {
+    console.error('Update my profile error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error updating profile',
+      error: error.message
+    });
+  }
+};
+
 // Helper function to generate unique customer userId
 const generateCustomerId = async () => {
   try {

@@ -6,9 +6,15 @@ const {
   updateUser,
   toggleUserActive,
   getCustomers,
-  createCustomer
+  createCustomer,
+  getMyProfile,
+  updateMyProfile
 } = require('../controllers/userController');
 const { protect, authorize } = require('../middleware/auth');
+
+// Profile routes (logged-in user)
+router.get('/me', protect, getMyProfile);
+router.put('/me', protect, updateMyProfile);
 
 // Create customer (Owner only)
 router.post('/create', protect, authorize('owner'), createCustomer);

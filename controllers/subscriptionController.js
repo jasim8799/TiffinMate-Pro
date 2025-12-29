@@ -2,6 +2,151 @@ const Subscription = require('../models/Subscription');
 const User = require('../models/User');
 const moment = require('moment');
 
+// @desc    Get available subscription plans
+// @route   GET /api/subscriptions/plans
+// @access  Public
+exports.getPlans = async (req, res) => {
+  try {
+    const plans = {
+      daily: { days: 1, price: 80 },
+      weekly: { days: 7, price: 500 },
+      monthly: { days: 30, price: 2000 }
+    };
+
+    res.status(200).json({
+      success: true,
+      data: plans
+    });
+  } catch (error) {
+    console.error('Get plans error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching plans',
+      error: error.message
+    });
+  }
+};
+
+// @desc    User selects/creates subscription
+// @route   POST /api/subscriptions/select
+// @access  Private (Customer only)
+exports.selectPlan = async (req, res) => {
+  try {
+    const { type, startDate } = req.body;
+
+    if (!type || !startDate) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please provide plan type and start date'
+      });
+    }
+
+    // Validate plan type
+    if (!['daily', 'weekly', 'monthly'].includes(type)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid plan type'
+      });
+    }
+
+    // Calculate dates and pricing
+    const start = moment(startDate);
+    let end, totalDays, amount;
+
+    switch (type) {
+      case 'daily':
+        end = moment(startDate);
+        totalDays = 1;
+        amount = 80;
+        break;
+      case 'weekly':
+        end = moment(startDate).add(6, 'days');
+        totalDays = 7;
+        amount = 500;
+        break;
+      case 'monthly':
+        end = moment(startDate).add(29, 'days');
+        totalDays = 30;
+        amount = 2000;
+        break;
+    }
+
+    // Expire any existing active subscriptions
+    await Subscription.updateMany(
+      { user: req.user._id, status: 'active' },
+      { status: 'expired' }
+    );
+
+    // Create new subscription (pending payment)
+    const subscription = await Subscription.create({
+      user: req.user._id,
+      planType: type,
+      startDate: start.toDate(),
+      endDate: end.toDate(),
+      totalDays,
+      remainingDays: totalDays,
+      amount,
+      mealPreferences: { includesLunch: true, includesDinner: true },
+      status: 'active', // Set to active immediately (payment handled separately)
+      createdBy: req.user._id
+    });
+
+    res.status(201).json({
+      success: true,
+      message: 'Subscription created successfully',
+      data: subscription
+    });
+  } catch (error) {
+    console.error('Select plan error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error creating subscription',
+      error: error.message
+    });
+  }
+};
+
+// @desc    Update subscription status
+// @route   PUT /api/subscriptions/:id/status
+// @access  Private (Owner only)
+exports.updateSubscriptionStatus = async (req, res) => {
+  try {
+    const { status } = req.body;
+
+    if (!status || !['active', 'paused', 'expired', 'disabled'].includes(status)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid status'
+      });
+    }
+
+    const subscription = await Subscription.findById(req.params.id);
+
+    if (!subscription) {
+      return res.status(404).json({
+        success: false,
+        message: 'Subscription not found'
+      });
+    }
+
+    subscription.status = status;
+    await subscription.save();
+
+    res.status(200).json({
+      success: true,
+      message: `Subscription ${status}`,
+      data: subscription
+    });
+  } catch (error) {
+    console.error('Update status error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error updating subscription status',
+      error: error.message
+    });
+  }
+};
+
 // @desc    Create subscription
 // @route   POST /api/subscriptions
 // @access  Private (Owner only)
