@@ -60,6 +60,7 @@ const mealRoutes = require('./routes/mealRoutes');
 const paymentRoutes = require('./routes/paymentRoutes');
 const adminRoutes = require('./routes/adminRoutes');
 const accessRequestRoutes = require('./routes/accessRequestRoutes');
+const calendarRoutes = require('./routes/calendarRoutes');
 
 // API Routes
 app.use('/api/auth', authRoutes);
@@ -70,6 +71,7 @@ app.use('/api/meals', mealRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/access-requests', accessRequestRoutes);
+app.use('/api/calendar', calendarRoutes);
 
 // Health check endpoint
 app.get('/health', (req, res) => {

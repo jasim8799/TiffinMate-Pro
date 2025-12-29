@@ -8,64 +8,92 @@ const moment = require('moment');
 // @access  Private (Customer)
 exports.selectMeal = async (req, res) => {
   try {
-    const { deliveryDate, mealType, selectedMeal } = req.body;
+    const { deliveryDate, lunch, dinner } = req.body;
 
-    if (!deliveryDate || !mealType || !selectedMeal) {
+    if (!deliveryDate) {
       return res.status(400).json({
         success: false,
-        message: 'Please provide all required fields'
+        message: 'Please provide delivery date'
       });
     }
 
-    // Calculate cutoff time (8 hours before delivery)
-    const cutoffHours = parseInt(process.env.MEAL_CUTOFF_HOURS) || 8;
-    const deliveryMoment = moment(deliveryDate);
-    const cutoffTime = deliveryMoment.clone().subtract(cutoffHours, 'hours');
+    // Calculate cutoff time (previous night 11 PM for lunch, same day 11 AM for dinner)
+    const deliveryMoment = moment(deliveryDate).startOf('day');
+    const lunchCutoff = deliveryMoment.clone().subtract(1, 'day').hour(23).minute(0).second(0);
+    const dinnerCutoff = deliveryMoment.clone().hour(11).minute(0).second(0);
+    const now = moment();
 
-    // Check if current time is before cutoff
-    if (moment().isAfter(cutoffTime)) {
+    // Check cutoff times
+    const canSelectLunch = now.isBefore(lunchCutoff);
+    const canSelectDinner = now.isBefore(dinnerCutoff);
+
+    if (lunch && !canSelectLunch) {
       return res.status(400).json({
         success: false,
-        message: `Meal selection closed. Cutoff time was ${cutoffTime.format('DD MMM YYYY, hh:mm A')}`
+        message: `Lunch selection closed. Cutoff time was ${lunchCutoff.format('DD MMM YYYY, hh:mm A')}`
       });
     }
 
-    // Check if meal order already exists
-    const existingOrder = await MealOrder.findOne({
-      user: req.user._id,
-      deliveryDate,
-      mealType
-    });
-
-    if (existingOrder) {
-      // Update existing order
-      existingOrder.selectedMeal = selectedMeal;
-      existingOrder.isAfterCutoff = false;
-      await existingOrder.save();
-
-      return res.status(200).json({
-        success: true,
-        message: 'Meal selection updated successfully',
-        data: existingOrder
+    if (dinner && !canSelectDinner) {
+      return res.status(400).json({
+        success: false,
+        message: `Dinner selection closed. Cutoff time was ${dinnerCutoff.format('DD MMM YYYY, hh:mm A')}`
       });
     }
 
-    // Create new meal order
-    const mealOrder = await MealOrder.create({
-      user: req.user._id,
-      orderDate: new Date(),
-      deliveryDate,
-      mealType,
-      selectedMeal,
-      cutoffTime: cutoffTime.toDate(),
-      isAfterCutoff: false,
-      status: 'confirmed'
-    });
+    // Handle lunch selection
+    if (lunch) {
+      const existingLunch = await MealOrder.findOne({
+        user: req.user._id,
+        deliveryDate: deliveryMoment.toDate(),
+        mealType: 'lunch'
+      });
 
-    res.status(201).json({
+      if (existingLunch) {
+        existingLunch.selectedMeal = lunch;
+        await existingLunch.save();
+      } else {
+        await MealOrder.create({
+          user: req.user._id,
+          orderDate: new Date(),
+          deliveryDate: deliveryMoment.toDate(),
+          mealType: 'lunch',
+          selectedMeal: lunch,
+          cutoffTime: lunchCutoff.toDate(),
+          isAfterCutoff: false,
+          status: 'confirmed'
+        });
+      }
+    }
+
+    // Handle dinner selection
+    if (dinner) {
+      const existingDinner = await MealOrder.findOne({
+        user: req.user._id,
+        deliveryDate: deliveryMoment.toDate(),
+        mealType: 'dinner'
+      });
+
+      if (existingDinner) {
+        existingDinner.selectedMeal = dinner;
+        await existingDinner.save();
+      } else {
+        await MealOrder.create({
+          user: req.user._id,
+          orderDate: new Date(),
+          deliveryDate: deliveryMoment.toDate(),
+          mealType: 'dinner',
+          selectedMeal: dinner,
+          cutoffTime: dinnerCutoff.toDate(),
+          isAfterCutoff: false,
+          status: 'confirmed'
+        });
+      }
+    }
+
+    res.status(200).json({
       success: true,
-      message: 'Meal selected successfully',
-      data: mealOrder
+      message: 'Meal selection saved successfully'
     });
   } catch (error) {
     console.error('Select meal error:', error);
@@ -91,28 +119,48 @@ exports.getMyMealSelection = async (req, res) => {
       });
     }
 
+    const deliveryMoment = moment(deliveryDate).startOf('day');
+    
+    // Find meal orders for this date
     const mealOrders = await MealOrder.find({
       user: req.user._id,
-      deliveryDate: new Date(deliveryDate)
+      deliveryDate: deliveryMoment.toDate()
     });
+
+    // Calculate cutoff times
+    const lunchCutoff = deliveryMoment.clone().subtract(1, 'day').hour(23).minute(0).second(0);
+    const dinnerCutoff = deliveryMoment.clone().hour(11).minute(0).second(0);
+    const now = moment();
+
+    // Get selected meals
+    let lunchMeal = null;
+    let dinnerMeal = null;
+    
+    mealOrders.forEach(order => {
+      if (order.mealType === 'lunch') {
+        lunchMeal = order.selectedMeal;
+      } else if (order.mealType === 'dinner') {
+        dinnerMeal = order.selectedMeal;
+      }
+    });
+
+    // Check if locked
+    const lunchLocked = now.isAfter(lunchCutoff);
+    const dinnerLocked = now.isAfter(dinnerCutoff);
 
     // Get default meals
     const defaultMeals = await DefaultMeal.find({ isActive: true });
 
-    // Calculate cutoff time
-    const cutoffHours = parseInt(process.env.MEAL_CUTOFF_HOURS) || 8;
-    const deliveryMoment = moment(deliveryDate);
-    const cutoffTime = deliveryMoment.clone().subtract(cutoffHours, 'hours');
-    const isAfterCutoff = moment().isAfter(cutoffTime);
-
     res.status(200).json({
       success: true,
       data: {
-        mealOrders,
-        defaultMeals,
-        cutoffTime: cutoffTime.toDate(),
-        isAfterCutoff,
-        canSelect: !isAfterCutoff
+        lunch: lunchMeal,
+        dinner: dinnerMeal,
+        lunchLocked: lunchLocked,
+        dinnerLocked: dinnerLocked,
+        lunchCutoff: lunchCutoff.toISOString(),
+        dinnerCutoff: dinnerCutoff.toISOString(),
+        defaultMeals: defaultMeals
       }
     });
   } catch (error) {

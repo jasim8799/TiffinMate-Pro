@@ -73,11 +73,11 @@ exports.selectPlan = async (req, res) => {
 
     // Expire any existing active subscriptions
     await Subscription.updateMany(
-      { user: req.user._id, status: 'active' },
+      { user: req.user._id, status: { $in: ['active', 'pending'] } },
       { status: 'expired' }
     );
 
-    // Create new subscription (pending payment)
+    // Create new subscription with PENDING status (awaiting payment)
     const subscription = await Subscription.create({
       user: req.user._id,
       planType: type,
@@ -87,13 +87,13 @@ exports.selectPlan = async (req, res) => {
       remainingDays: totalDays,
       amount,
       mealPreferences: { includesLunch: true, includesDinner: true },
-      status: 'active', // Set to active immediately (payment handled separately)
+      status: 'pending', // Pending until payment verified
       createdBy: req.user._id
     });
 
     res.status(201).json({
       success: true,
-      message: 'Subscription created successfully',
+      message: 'Subscription created. Please complete payment to activate.',
       data: subscription
     });
   } catch (error) {
@@ -253,15 +253,18 @@ exports.getUserSubscriptions = async (req, res) => {
 // @access  Private
 exports.getMyActiveSubscription = async (req, res) => {
   try {
+    // Find active or pending subscription
     const subscription = await Subscription.findOne({
       user: req.user._id,
-      status: 'active'
-    }).populate('user', 'name mobile userId');
+      status: { $in: ['active', 'pending'] }
+    })
+      .populate('user', 'name mobile userId')
+      .sort({ createdAt: -1 }); // Get most recent
 
     if (!subscription) {
       return res.status(404).json({
         success: false,
-        message: 'No active subscription found'
+        message: 'No active or pending subscription found'
       });
     }
 
