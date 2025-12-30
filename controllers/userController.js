@@ -44,28 +44,13 @@ exports.getMyProfile = async (req, res) => {
 // @access  Private (JWT required)
 exports.updateMyProfile = async (req, res) => {
   try {
-    const { name } = req.body;
+    const { name, address } = req.body;
 
-    // Only name can be updated
-    if (!name) {
+    // At least one field must be provided
+    if (!name && !address) {
       return res.status(400).json({
         success: false,
-        message: 'Please provide name to update'
-      });
-    }
-
-    // Validate name length
-    if (name.trim().length < 2) {
-      return res.status(400).json({
-        success: false,
-        message: 'Name must be at least 2 characters long'
-      });
-    }
-
-    if (name.length > 50) {
-      return res.status(400).json({
-        success: false,
-        message: 'Name must not exceed 50 characters'
+        message: 'Please provide at least one field to update (name or address)'
       });
     }
 
@@ -78,7 +63,44 @@ exports.updateMyProfile = async (req, res) => {
       });
     }
 
-    user.name = name.trim();
+    // Validate and update name if provided
+    if (name) {
+      if (name.trim().length < 2) {
+        return res.status(400).json({
+          success: false,
+          message: 'Name must be at least 2 characters long'
+        });
+      }
+
+      if (name.length > 50) {
+        return res.status(400).json({
+          success: false,
+          message: 'Name must not exceed 50 characters'
+        });
+      }
+
+      user.name = name.trim();
+    }
+
+    // Validate and update address if provided
+    if (address) {
+      if (address.trim().length < 5) {
+        return res.status(400).json({
+          success: false,
+          message: 'Address must be at least 5 characters long'
+        });
+      }
+
+      if (address.length > 200) {
+        return res.status(400).json({
+          success: false,
+          message: 'Address must not exceed 200 characters'
+        });
+      }
+
+      user.address = address.trim();
+    }
+
     await user.save();
 
     res.status(200).json({
@@ -88,6 +110,7 @@ exports.updateMyProfile = async (req, res) => {
         userId: user.userId,
         name: user.name,
         mobile: user.mobile,
+        address: user.address,
         role: user.role
       }
     });
