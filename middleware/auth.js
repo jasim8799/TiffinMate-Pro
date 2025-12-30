@@ -63,6 +63,17 @@ exports.authorize = (...roles) => {
   };
 };
 
+// Owner-only access shortcut
+exports.ownerOnly = (req, res, next) => {
+  if (req.user.role !== 'owner') {
+    return res.status(403).json({
+      success: false,
+      message: 'Access denied. Owner privileges required.'
+    });
+  }
+  next();
+};
+
 // Generate JWT token
 exports.generateToken = (id) => {
   return jwt.sign({ id }, process.env.JWT_SECRET, {
