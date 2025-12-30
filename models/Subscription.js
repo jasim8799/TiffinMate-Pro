@@ -8,7 +8,12 @@ const subscriptionSchema = new mongoose.Schema({
   },
   planType: {
     type: String,
-    enum: ['trial', 'daily', 'weekly', 'monthly'],
+    enum: ['trial', 'classic', 'premium-veg', 'premium-non-veg'],
+    required: true
+  },
+  planCategory: {
+    type: String,
+    enum: ['trial', 'classic', 'premium'],
     required: true
   },
   startDate: {

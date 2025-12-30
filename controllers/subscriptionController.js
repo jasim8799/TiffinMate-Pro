@@ -19,12 +19,37 @@ exports.getPlans = async (req, res) => {
     
     if (!hasUsedTrial) {
       // New users see trial option (3 days free)
-      plans.trial = { days: 3, price: 0, description: '3-Day Free Trial' };
+      plans.trial = { 
+        days: 3, 
+        price: 0, 
+        description: '3-Day Free Trial',
+        category: 'trial',
+        menuAccess: 'classic'
+      };
     }
     
-    // All users see weekly and monthly
-    plans.weekly = { days: 7, price: 500, description: '7 Days' };
-    plans.monthly = { days: 30, price: 2000, description: '30 Days' };
+    // All users see Classic and Premium plans
+    plans.classic = { 
+      days: 30, 
+      price: 2999, 
+      description: 'Classic Menu - Monthly',
+      category: 'classic',
+      menuAccess: 'classic'
+    };
+    plans['premium-veg'] = { 
+      days: 30, 
+      price: 3999, 
+      description: 'Premium VEG Menu - Monthly',
+      category: 'premium',
+      menuAccess: 'premium-veg'
+    };
+    plans['premium-non-veg'] = { 
+      days: 30, 
+      price: 3999, 
+      description: 'Premium NON-VEG Menu - Monthly',
+      category: 'premium',
+      menuAccess: 'premium-non-veg'
+    };
 
     res.status(200).json({
       success: true,
@@ -56,7 +81,7 @@ exports.selectPlan = async (req, res) => {
     }
 
     // Validate plan type
-    if (!['trial', 'daily', 'weekly', 'monthly'].includes(type)) {
+    if (!['trial', 'classic', 'premium-veg', 'premium-non-veg'].includes(type)) {
       return res.status(400).json({
         success: false,
         message: 'Invalid plan type'
@@ -76,28 +101,32 @@ exports.selectPlan = async (req, res) => {
 
     // Calculate dates and pricing
     const start = moment(startDate);
-    let end, totalDays, amount;
+    let end, totalDays, amount, planCategory;
 
     switch (type) {
       case 'trial':
         end = moment(startDate).add(2, 'days');
         totalDays = 3;
         amount = 0; // Free trial
+        planCategory = 'trial';
         break;
-      case 'daily':
-        end = moment(startDate);
-        totalDays = 1;
-        amount = 80;
-        break;
-      case 'weekly':
-        end = moment(startDate).add(6, 'days');
-        totalDays = 7;
-        amount = 500;
-        break;
-      case 'monthly':
+      case 'classic':
         end = moment(startDate).add(29, 'days');
         totalDays = 30;
-        amount = 2000;
+        amount = 2999;
+        planCategory = 'classic';
+        break;
+      case 'premium-veg':
+        end = moment(startDate).add(29, 'days');
+        totalDays = 30;
+        amount = 3999;
+        planCategory = 'premium';
+        break;
+      case 'premium-non-veg':
+        end = moment(startDate).add(29, 'days');
+        totalDays = 30;
+        amount = 3999;
+        planCategory = 'premium';
         break;
     }
 
@@ -117,6 +146,7 @@ exports.selectPlan = async (req, res) => {
     const subscription = await Subscription.create({
       user: req.user._id,
       planType: type,
+      planCategory: planCategory,
       startDate: start.toDate(),
       endDate: end.toDate(),
       totalDays,

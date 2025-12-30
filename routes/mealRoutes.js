@@ -5,12 +5,14 @@ const {
   getMyMealSelection,
   getDefaultMeals,
   setDefaultMeal,
-  getAllMealOrders
+  getAllMealOrders,
+  getWeeklyMenu
 } = require('../controllers/mealController');
 const { protect, authorize } = require('../middleware/auth');
 
 router.post('/select', protect, authorize('customer'), selectMeal);
 router.get('/my-selection', protect, authorize('customer'), getMyMealSelection);
+router.get('/weekly-menu', protect, getWeeklyMenu);
 router.get('/defaults', protect, getDefaultMeals);
 router.post('/defaults', protect, authorize('owner'), setDefaultMeal);
 router.get('/orders', protect, authorize('owner'), getAllMealOrders);

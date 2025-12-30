@@ -1,6 +1,8 @@
 const MealOrder = require('../models/MealOrder');
 const DefaultMeal = require('../models/DefaultMeal');
 const Delivery = require('../models/Delivery');
+const WeeklyMenu = require('../models/WeeklyMenu');
+const Subscription = require('../models/Subscription');
 const moment = require('moment');
 
 // @desc    Select meal for specific date
@@ -267,6 +269,78 @@ exports.getAllMealOrders = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Error fetching meal orders',
+      error: error.message
+    });
+  }
+};
+
+// @desc    Get weekly menu based on user's subscription plan
+// @route   GET /api/meals/weekly-menu
+// @access  Private
+exports.getWeeklyMenu = async (req, res) => {
+  try {
+    // Get user's active subscription to determine plan category
+    const subscription = await Subscription.findOne({
+      user: req.user._id,
+      status: 'active'
+    }).sort({ createdAt: -1 });
+
+    let allowedCategories = ['classic']; // Default to classic
+
+    if (subscription) {
+      if (subscription.planCategory === 'trial') {
+        allowedCategories = ['classic']; // Trial users get classic menu
+      } else if (subscription.planCategory === 'premium') {
+        // Premium users can see their specific menu
+        allowedCategories = [subscription.planType]; // 'premium-veg' or 'premium-non-veg'
+      } else if (subscription.planCategory === 'classic') {
+        allowedCategories = ['classic'];
+      }
+    }
+
+    // Fetch menu for allowed categories
+    const weeklyMenu = await WeeklyMenu.find({
+      planCategory: { $in: allowedCategories },
+      isActive: true
+    }).sort({ dayOfWeek: 1, mealType: 1 });
+
+    // Organize by day of week
+    const menuByDay = {
+      sunday: { lunch: null, dinner: null },
+      monday: { lunch: null, dinner: null },
+      tuesday: { lunch: null, dinner: null },
+      wednesday: { lunch: null, dinner: null },
+      thursday: { lunch: null, dinner: null },
+      friday: { lunch: null, dinner: null },
+      saturday: { lunch: null, dinner: null }
+    };
+
+    weeklyMenu.forEach(menu => {
+      if (menuByDay[menu.dayOfWeek]) {
+        menuByDay[menu.dayOfWeek][menu.mealType] = {
+          items: menu.items,
+          description: menu.description,
+          planCategory: menu.planCategory
+        };
+      }
+    });
+
+    res.status(200).json({
+      success: true,
+      data: {
+        menu: menuByDay,
+        userPlan: subscription ? {
+          planType: subscription.planType,
+          planCategory: subscription.planCategory
+        } : null,
+        allowedCategories
+      }
+    });
+  } catch (error) {
+    console.error('Get weekly menu error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching weekly menu',
       error: error.message
     });
   }
