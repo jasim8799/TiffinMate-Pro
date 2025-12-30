@@ -7,15 +7,29 @@ const moment = require('moment');
 // @access  Public
 exports.getPlans = async (req, res) => {
   try {
-    const plans = {
-      daily: { days: 1, price: 80 },
-      weekly: { days: 7, price: 500 },
-      monthly: { days: 30, price: 2000 }
-    };
+    // Check if user has used trial (only if authenticated)
+    let hasUsedTrial = true; // Default to true for unauthenticated requests
+    
+    if (req.user) {
+      const user = await User.findById(req.user._id);
+      hasUsedTrial = user?.hasUsedTrial || false;
+    }
+
+    const plans = {};
+    
+    if (!hasUsedTrial) {
+      // New users see trial option (3 days free)
+      plans.trial = { days: 3, price: 0, description: '3-Day Free Trial' };
+    }
+    
+    // All users see weekly and monthly
+    plans.weekly = { days: 7, price: 500, description: '7 Days' };
+    plans.monthly = { days: 30, price: 2000, description: '30 Days' };
 
     res.status(200).json({
       success: true,
-      data: plans
+      data: plans,
+      hasUsedTrial
     });
   } catch (error) {
     console.error('Get plans error:', error);
@@ -42,11 +56,22 @@ exports.selectPlan = async (req, res) => {
     }
 
     // Validate plan type
-    if (!['daily', 'weekly', 'monthly'].includes(type)) {
+    if (!['trial', 'daily', 'weekly', 'monthly'].includes(type)) {
       return res.status(400).json({
         success: false,
         message: 'Invalid plan type'
       });
+    }
+
+    // Check if user is trying to use trial when already used
+    if (type === 'trial') {
+      const user = await User.findById(req.user._id);
+      if (user.hasUsedTrial) {
+        return res.status(400).json({
+          success: false,
+          message: 'Trial period already used. Please select a regular plan.'
+        });
+      }
     }
 
     // Calculate dates and pricing
@@ -54,6 +79,11 @@ exports.selectPlan = async (req, res) => {
     let end, totalDays, amount;
 
     switch (type) {
+      case 'trial':
+        end = moment(startDate).add(2, 'days');
+        totalDays = 3;
+        amount = 0; // Free trial
+        break;
       case 'daily':
         end = moment(startDate);
         totalDays = 1;
@@ -77,7 +107,13 @@ exports.selectPlan = async (req, res) => {
       { status: 'expired' }
     );
 
-    // Create new subscription with PENDING status (awaiting payment)
+    // For trial plans, mark user as having used trial and auto-activate
+    if (type === 'trial') {
+      await User.findByIdAndUpdate(req.user._id, { hasUsedTrial: true });
+    }
+
+    // Create new subscription
+    // Trial is auto-activated (free), others require payment
     const subscription = await Subscription.create({
       user: req.user._id,
       planType: type,
@@ -87,13 +123,17 @@ exports.selectPlan = async (req, res) => {
       remainingDays: totalDays,
       amount,
       mealPreferences: { includesLunch: true, includesDinner: true },
-      status: 'pending', // Pending until payment verified
+      status: type === 'trial' ? 'active' : 'pending', // Trial is free and auto-activated
       createdBy: req.user._id
     });
 
+    const message = type === 'trial'
+      ? 'Trial activated! Enjoy 3 days of free meals.'
+      : 'Subscription created. Please complete payment to activate.';
+
     res.status(201).json({
       success: true,
-      message: 'Subscription created. Please complete payment to activate.',
+      message,
       data: subscription
     });
   } catch (error) {

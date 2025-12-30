@@ -54,6 +54,10 @@ const userSchema = new mongoose.Schema({
     type: Boolean,
     default: true  // New users must change password on first login
   },
+  hasUsedTrial: {
+    type: Boolean,
+    default: false  // Track if user has used their 3-day trial period
+  },
   profileImage: {
     type: String,
     default: null
