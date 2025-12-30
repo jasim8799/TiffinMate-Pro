@@ -286,6 +286,7 @@ exports.getWeeklyMenu = async (req, res) => {
     }).sort({ createdAt: -1 });
 
     let allowedCategories = ['classic']; // Default to classic
+    let dietaryPreference = 'both'; // Default to both
 
     if (subscription) {
       if (subscription.planCategory === 'trial') {
@@ -296,6 +297,9 @@ exports.getWeeklyMenu = async (req, res) => {
       } else if (subscription.planCategory === 'classic') {
         allowedCategories = ['classic'];
       }
+      
+      // Get dietary preference
+      dietaryPreference = subscription.mealPreferences?.dietaryPreference || 'both';
     }
 
     // Fetch menu for allowed categories
@@ -303,6 +307,29 @@ exports.getWeeklyMenu = async (req, res) => {
       planCategory: { $in: allowedCategories },
       isActive: true
     }).sort({ dayOfWeek: 1, mealType: 1 });
+
+    // Filter menu items based on dietary preference
+    const filterMenuItems = (items) => {
+      if (!items || items.length === 0) return items;
+      
+      const nonVegKeywords = ['CHICKEN', 'EGG', 'MUTTON', 'FISH', 'KEEMA', 'TANDOORI', 'BIRYANI', 'KORMA', 'BUTTER CHICKEN', 'HYDRABADI', 'MURADABADI'];
+      
+      if (dietaryPreference === 'veg') {
+        // Remove items with non-veg keywords
+        return items.filter(item => {
+          const upperItem = item.toUpperCase();
+          return !nonVegKeywords.some(keyword => upperItem.includes(keyword));
+        });
+      } else if (dietaryPreference === 'non-veg') {
+        // Keep only items with non-veg keywords
+        return items.filter(item => {
+          const upperItem = item.toUpperCase();
+          return nonVegKeywords.some(keyword => upperItem.includes(keyword));
+        });
+      }
+      // 'both' - return all items
+      return items;
+    };
 
     // Organize by day of week
     const menuByDay = {
@@ -317,11 +344,16 @@ exports.getWeeklyMenu = async (req, res) => {
 
     weeklyMenu.forEach(menu => {
       if (menuByDay[menu.dayOfWeek]) {
-        menuByDay[menu.dayOfWeek][menu.mealType] = {
-          items: menu.items,
-          description: menu.description,
-          planCategory: menu.planCategory
-        };
+        const filteredItems = filterMenuItems(menu.items);
+        
+        // Only include meal if there are items after filtering
+        if (filteredItems && filteredItems.length > 0) {
+          menuByDay[menu.dayOfWeek][menu.mealType] = {
+            items: filteredItems,
+            description: menu.description,
+            planCategory: menu.planCategory
+          };
+        }
       }
     });
 
@@ -331,9 +363,11 @@ exports.getWeeklyMenu = async (req, res) => {
         menu: menuByDay,
         userPlan: subscription ? {
           planType: subscription.planType,
-          planCategory: subscription.planCategory
+          planCategory: subscription.planCategory,
+          dietaryPreference: dietaryPreference
         } : null,
-        allowedCategories
+        allowedCategories,
+        dietaryPreference
       }
     });
   } catch (error) {

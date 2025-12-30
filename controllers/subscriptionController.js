@@ -71,12 +71,19 @@ exports.getPlans = async (req, res) => {
 // @access  Private (Customer only)
 exports.selectPlan = async (req, res) => {
   try {
-    const { type, startDate } = req.body;
+    const { type, startDate, dietaryPreference } = req.body;
 
     if (!type || !startDate) {
       return res.status(400).json({
         success: false,
         message: 'Please provide plan type and start date'
+      });
+    }
+
+    if (!dietaryPreference || !['veg', 'non-veg', 'both'].includes(dietaryPreference)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please select dietary preference (veg, non-veg, or both)'
       });
     }
 
@@ -136,13 +143,13 @@ exports.selectPlan = async (req, res) => {
       { status: 'expired' }
     );
 
-    // For trial plans, mark user as having used trial and auto-activate
+    // For trial plans, mark user as having used trial
     if (type === 'trial') {
       await User.findByIdAndUpdate(req.user._id, { hasUsedTrial: true });
     }
 
     // Create new subscription
-    // Trial is auto-activated (free), others require payment
+    // ALL plans require payment now (including trial for food cost)
     const subscription = await Subscription.create({
       user: req.user._id,
       planType: type,
@@ -152,13 +159,17 @@ exports.selectPlan = async (req, res) => {
       totalDays,
       remainingDays: totalDays,
       amount,
-      mealPreferences: { includesLunch: true, includesDinner: true },
-      status: type === 'trial' ? 'active' : 'pending', // Trial is free and auto-activated
+      mealPreferences: { 
+        includesLunch: true, 
+        includesDinner: true,
+        dietaryPreference: dietaryPreference 
+      },
+      status: 'pending', // All plans require payment
       createdBy: req.user._id
     });
 
     const message = type === 'trial'
-      ? 'Trial activated! Enjoy 3 days of free meals.'
+      ? 'Trial subscription created. Please complete payment to activate (₹0 for trial, but food cost applies).'
       : 'Subscription created. Please complete payment to activate.';
 
     res.status(201).json({

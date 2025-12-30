@@ -53,6 +53,11 @@ const subscriptionSchema = new mongoose.Schema({
     includesDinner: {
       type: Boolean,
       default: true
+    },
+    dietaryPreference: {
+      type: String,
+      enum: ['veg', 'non-veg', 'both'],
+      default: 'both'
     }
   },
   expiryReminderSent: {
