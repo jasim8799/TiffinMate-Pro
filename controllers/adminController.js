@@ -62,6 +62,41 @@ exports.getDashboardStats = async (req, res) => {
 
     const monthlyRevenue = monthPayments.length > 0 ? monthPayments[0].totalRevenue : 0;
 
+    // Today's collection (paid payments today)
+    const todayPayments = await Payment.aggregate([
+      {
+        $match: {
+          paymentDate: { $gte: today, $lt: tomorrow },
+          paymentStatus: 'paid'
+        }
+      },
+      {
+        $group: {
+          _id: null,
+          totalCollection: { $sum: '$paidAmount' }
+        }
+      }
+    ]);
+
+    const todayCollection = todayPayments.length > 0 ? todayPayments[0].totalCollection : 0;
+
+    // Pending amount (sum of all pending payments)
+    const pendingAmount = await Payment.aggregate([
+      {
+        $match: {
+          paymentStatus: { $in: ['pending', 'partial'] }
+        }
+      },
+      {
+        $group: {
+          _id: null,
+          totalPending: { $sum: '$amount' }
+        }
+      }
+    ]);
+
+    const totalPendingAmount = pendingAmount.length > 0 ? pendingAmount[0].totalPending : 0;
+
     res.status(200).json({
       success: true,
       data: {
@@ -85,6 +120,10 @@ exports.getDashboardStats = async (req, res) => {
         },
         revenue: {
           thisMonth: monthlyRevenue
+        },
+        collection: {
+          today: todayCollection,
+          pending: totalPendingAmount
         }
       }
     });
