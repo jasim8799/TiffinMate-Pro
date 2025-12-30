@@ -62,6 +62,7 @@ const adminRoutes = require('./routes/adminRoutes');
 const accessRequestRoutes = require('./routes/accessRequestRoutes');
 const calendarRoutes = require('./routes/calendarRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
+const leadRoutes = require('./routes/leadRoutes');
 
 // API Routes
 app.use('/api/auth', authRoutes);
@@ -74,6 +75,7 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/access-requests', accessRequestRoutes);
 app.use('/api/calendar', calendarRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/leads', leadRoutes);
 
 // Health check endpoint
 app.get('/health', (req, res) => {
