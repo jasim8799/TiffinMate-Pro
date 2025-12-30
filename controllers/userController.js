@@ -1,5 +1,6 @@
 const User = require('../models/User');
 const smsService = require('../services/smsService');
+const { createNotification } = require('./notificationController');
 
 // @desc    Get my profile (logged-in user)
 // @route   GET /api/users/me
@@ -198,6 +199,14 @@ exports.createCustomer = async (req, res) => {
       // Continue even if SMS fails - owner can manually share credentials
     }
 
+    // Create notification for owner
+    await createNotification(
+      'NEW_USER',
+      `New customer registered: ${name}`,
+      user._id,
+      'User'
+    );
+
     // Return success response (without password)
     res.status(201).json({
       success: true,
@@ -383,6 +392,66 @@ exports.getCustomers = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Error fetching customers',
+      error: error.message
+    });
+  }
+};
+
+// @desc    Upload profile image
+// @route   POST /api/users/upload-profile-image
+// @access  Private (JWT required)
+exports.uploadProfileImage = async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message: 'No image file provided'
+      });
+    }
+
+    // Validate file size (2MB max)
+    if (req.file.size > 2 * 1024 * 1024) {
+      return res.status(400).json({
+        success: false,
+        message: 'Image size must be less than 2MB'
+      });
+    }
+
+    // Validate file type
+    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png'];
+    if (!allowedTypes.includes(req.file.mimetype)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Only JPEG and PNG images are allowed'
+      });
+    }
+
+    const user = await User.findById(req.user._id);
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    // Save file path (relative to uploads folder)
+    const imageUrl = `/uploads/${req.file.filename}`;
+    user.profileImage = imageUrl;
+    await user.save();
+
+    res.status(200).json({
+      success: true,
+      message: 'Profile image uploaded successfully',
+      data: {
+        profileImage: imageUrl
+      }
+    });
+  } catch (error) {
+    console.error('Upload profile image error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error uploading profile image',
       error: error.message
     });
   }

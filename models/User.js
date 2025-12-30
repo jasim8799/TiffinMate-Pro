@@ -54,6 +54,10 @@ const userSchema = new mongoose.Schema({
     type: Boolean,
     default: true  // New users must change password on first login
   },
+  profileImage: {
+    type: String,
+    default: null
+  },
   otp: {
     code: String,
     expiry: Date,

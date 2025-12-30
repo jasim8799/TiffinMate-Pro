@@ -45,4 +45,8 @@ const upload = multer({
   fileFilter: fileFilter
 });
 
+// Export helper for single file upload
+const uploadSingle = (fieldName) => upload.single(fieldName);
+
 module.exports = upload;
+module.exports.uploadSingle = uploadSingle;

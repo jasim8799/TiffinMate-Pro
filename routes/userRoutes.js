@@ -8,13 +8,16 @@ const {
   getCustomers,
   createCustomer,
   getMyProfile,
-  updateMyProfile
+  updateMyProfile,
+  uploadProfileImage
 } = require('../controllers/userController');
 const { protect, authorize } = require('../middleware/auth');
+const { uploadSingle } = require('../middleware/upload');
 
 // Profile routes (logged-in user)
 router.get('/me', protect, getMyProfile);
 router.put('/me', protect, updateMyProfile);
+router.post('/upload-profile-image', protect, uploadSingle('profileImage'), uploadProfileImage);
 
 // Create customer (Owner only)
 router.post('/create', protect, authorize('owner'), createCustomer);
