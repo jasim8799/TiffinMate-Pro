@@ -19,6 +19,73 @@ exports.selectMeal = async (req, res) => {
       });
     }
 
+    // Get user's subscription to check dietary preference
+    const subscription = await Subscription.findOne({
+      user: req.user._id,
+      status: 'active'
+    }).sort({ createdAt: -1 });
+
+    const dietaryPreference = subscription?.mealPreferences?.dietaryPreference || 'both';
+
+    // Helper function to check if meal contains non-veg items
+    const nonVegKeywords = ['CHICKEN', 'EGG', 'MUTTON', 'FISH', 'KEEMA', 'TANDOORI', 'BIRYANI', 'KORMA', 'BUTTER CHICKEN', 'HYDRABADI', 'MURADABADI'];
+    const isNonVeg = (mealName) => {
+      if (!mealName) return false;
+      const upperMeal = mealName.toUpperCase();
+      return nonVegKeywords.some(keyword => upperMeal.includes(keyword));
+    };
+
+    // Validate lunch selection based on dietary preference
+    if (lunch) {
+      const lunchIsNonVeg = isNonVeg(lunch);
+      
+      if (dietaryPreference === 'veg' && lunchIsNonVeg) {
+        return res.status(400).json({
+          success: false,
+          message: 'You have a VEG-only subscription. Cannot select non-veg meals.'
+        });
+      }
+      
+      if (dietaryPreference === 'non-veg' && !lunchIsNonVeg) {
+        return res.status(400).json({
+          success: false,
+          message: 'You have a NON-VEG only subscription. Cannot select veg meals.'
+        });
+      }
+    }
+
+    // Validate dinner selection based on dietary preference
+    if (dinner) {
+      const dinnerIsNonVeg = isNonVeg(dinner);
+      
+      if (dietaryPreference === 'veg' && dinnerIsNonVeg) {
+        return res.status(400).json({
+          success: false,
+          message: 'You have a VEG-only subscription. Cannot select non-veg meals.'
+        });
+      }
+      
+      if (dietaryPreference === 'non-veg' && !dinnerIsNonVeg) {
+        return res.status(400).json({
+          success: false,
+          message: 'You have a NON-VEG only subscription. Cannot select veg meals.'
+        });
+      }
+    }
+
+    // For 'both' preference, ensure user doesn't mix veg and non-veg in same order
+    if (dietaryPreference === 'both' && lunch && dinner) {
+      const lunchIsNonVeg = isNonVeg(lunch);
+      const dinnerIsNonVeg = isNonVeg(dinner);
+      
+      if (lunchIsNonVeg !== dinnerIsNonVeg) {
+        return res.status(400).json({
+          success: false,
+          message: 'Cannot mix VEG and NON-VEG meals in the same day. Please select either all VEG or all NON-VEG.'
+        });
+      }
+    }
+
     // Calculate cutoff time (previous night 11 PM for lunch, same day 11 AM for dinner)
     const deliveryMoment = moment(deliveryDate).startOf('day');
     const lunchCutoff = deliveryMoment.clone().subtract(1, 'day').hour(23).minute(0).second(0);
@@ -153,6 +220,14 @@ exports.getMyMealSelection = async (req, res) => {
     // Get default meals
     const defaultMeals = await DefaultMeal.find({ isActive: true });
 
+    // Get user's dietary preference
+    const subscription = await Subscription.findOne({
+      user: req.user._id,
+      status: 'active'
+    }).sort({ createdAt: -1 });
+
+    const dietaryPreference = subscription?.mealPreferences?.dietaryPreference || 'both';
+
     res.status(200).json({
       success: true,
       data: {
@@ -162,7 +237,8 @@ exports.getMyMealSelection = async (req, res) => {
         dinnerLocked: dinnerLocked,
         lunchCutoff: lunchCutoff.toISOString(),
         dinnerCutoff: dinnerCutoff.toISOString(),
-        defaultMeals: defaultMeals
+        defaultMeals: defaultMeals,
+        dietaryPreference: dietaryPreference
       }
     });
   } catch (error) {
