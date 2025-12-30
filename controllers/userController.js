@@ -209,7 +209,7 @@ exports.createCustomer = async (req, res) => {
 
     // Send SMS with credentials
     try {
-      const smsMessage = `Welcome to TiffinMate! Your User ID is ${userId} and Temporary Password is ${tempPassword}. Please login and change your password.`;
+      const smsMessage = `Welcome to The Home Kitchen! Your User ID is ${userId} and Temporary Password is ${tempPassword}. Please login and change your password.`;
       
       await smsService.sendSMS(
         mobile,

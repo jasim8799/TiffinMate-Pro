@@ -81,7 +81,7 @@ app.use('/api/leads', leadRoutes);
 app.get('/health', (req, res) => {
   res.status(200).json({ 
     status: 'OK', 
-    message: 'TiffinMate Backend is running',
+    message: 'The Home Kitchen Backend is running',
     timestamp: new Date().toISOString(),
     environment: process.env.NODE_ENV || 'development'
   });
@@ -91,7 +91,7 @@ app.get('/health', (req, res) => {
 app.get('/', (req, res) => {
   res.status(200).json({
     success: true,
-    message: 'TiffinMate API v1.0',
+    message: 'The Home Kitchen API v1.0',
     docs: '/api'
   });
 });
@@ -127,7 +127,7 @@ if (process.env.ENABLE_CRON !== 'false') {
 // Start server
 const PORT = process.env.PORT || 5000;
 const server = app.listen(PORT, '0.0.0.0', () => {
-  console.log(`🚀 TiffinMate Server running on port ${PORT}`);
+  console.log(`🚀 The Home Kitchen Server running on port ${PORT}`);
   console.log(`📱 Environment: ${process.env.NODE_ENV}`);
 });
 

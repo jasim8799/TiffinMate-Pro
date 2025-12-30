@@ -145,7 +145,7 @@ class Fast2SMSService {
       // CRITICAL: Use Quick Transactional Route 'q' (SAME AS SCHOOL PROJECT)
       // This route does NOT require DLT templates or OTP Message API
       // Replace {{OTP}} placeholder with actual OTP in the message
-      const message = `Your TiffinMate login OTP is ${otp}. Valid for 5 minutes. Do not share this OTP.`;
+      const message = `Your The Home Kitchen login OTP is ${otp}. Valid for 5 minutes. Do not share this OTP.`;
 
       // EXACT Fast2SMS Quick Transactional payload structure
       const payload = {
@@ -228,22 +228,22 @@ class Fast2SMSService {
   }
 
   async sendCredentials(mobile, userId, password) {
-    const message = `Welcome to TiffinMate! Your User ID: ${userId}, Temporary Password: ${password}. Please change your password on first login.`;
+    const message = `Welcome to The Home Kitchen! Your User ID: ${userId}, Temporary Password: ${password}. Please change your password on first login.`;
     return await this.sendSMS(mobile, message, 'credentials');
   }
 
   async sendSubscriptionReminder(mobile, userName, daysRemaining, userId) {
-    const message = `Hi ${userName}, your TiffinMate subscription will expire in ${daysRemaining} days. Please renew to continue enjoying our service.`;
+    const message = `Hi ${userName}, your The Home Kitchen subscription will expire in ${daysRemaining} days. Please renew to continue enjoying our service.`;
     return await this.sendSMS(mobile, message, 'subscription-reminder', userId);
   }
 
   async sendSubscriptionExpiry(mobile, userName, userId) {
-    const message = `Hi ${userName}, your TiffinMate subscription has expired. Please contact us to renew your service.`;
+    const message = `Hi ${userName}, your The Home Kitchen subscription has expired. Please contact us to renew your service.`;
     return await this.sendSMS(mobile, message, 'subscription-expiry', userId);
   }
 
   async sendServiceDisabled(mobile, userName, userId) {
-    const message = `Hi ${userName}, your TiffinMate service has been temporarily disabled due to subscription expiry. Please renew to resume service.`;
+    const message = `Hi ${userName}, your The Home Kitchen service has been temporarily disabled due to subscription expiry. Please renew to resume service.`;
     return await this.sendSMS(mobile, message, 'subscription-disabled', userId);
   }
 
@@ -273,7 +273,7 @@ class Fast2SMSService {
   }
 
   async sendAccessApproved(mobile, userName, userId, password) {
-    const message = `Hi ${userName}, your access request has been approved! User ID: ${userId}, Password: ${password}. Download TiffinMate app to login.`;
+    const message = `Hi ${userName}, your access request has been approved! User ID: ${userId}, Password: ${password}. Download The Home Kitchen app to login.`;
     return await this.sendSMS(mobile, message, 'access-approved');
   }
 
