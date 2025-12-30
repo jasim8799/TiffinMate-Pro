@@ -51,8 +51,8 @@ exports.createPayment = async (req, res) => {
       paymentDate: new Date()
     });
 
-    // Generate UPI QR string
-    const upiString = `upi://pay?pa=${UPI_CONFIG.upiId}&pn=${encodeURIComponent(UPI_CONFIG.name)}&am=${amount}&cu=INR`;
+    // Generate UPI payment link
+    const upiLink = `upi://pay?pa=${UPI_CONFIG.upiId}&pn=${encodeURIComponent(UPI_CONFIG.name)}&am=${amount}&cu=INR&tn=${encodeURIComponent(referenceNote || 'Payment for meal subscription')}`;
 
     res.status(201).json({
       success: true,
@@ -62,7 +62,8 @@ exports.createPayment = async (req, res) => {
         upiId: UPI_CONFIG.upiId,
         name: UPI_CONFIG.name,
         amount,
-        qrString: upiString
+        upiLink: upiLink,
+        qrString: upiLink
       }
     });
   } catch (error) {

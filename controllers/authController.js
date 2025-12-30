@@ -45,96 +45,26 @@ exports.login = async (req, res) => {
       });
     }
 
-    // ROLE-BASED AUTHENTICATION FLOW
-    // OWNER: Requires OTP verification
-    // CUSTOMER: Direct login with JWT token (NO OTP)
+    // DIRECT LOGIN FLOW (OTP disabled for now)
+    // Both OWNER and CUSTOMER: Direct login with JWT token
     
-    if (user.role === 'owner') {
-      // ===== OWNER FLOW: Send OTP =====
-      console.log(`🔑 OWNER LOGIN: ${user.userId} - OTP flow initiated`);
-      
-      // Validate mobile number exists
-      if (!user.mobile) {
-        return res.status(400).json({
-          success: false,
-          message: 'Invalid registered mobile number. Please contact admin.'
-        });
+    console.log(`🔑 LOGIN: ${user.userId} (${user.role}) - Direct login`);
+    
+    // Generate JWT token directly
+    const token = generateToken(user._id);
+
+    res.status(200).json({
+      success: true,
+      requiresOtp: false,
+      token: token,
+      data: {
+        userId: user.userId,
+        name: user.name,
+        mobile: user.mobile,
+        role: user.role,
+        requiresPasswordChange: !user.isPasswordChanged
       }
-
-      // Validate Indian mobile number format (10 digits, starts with 6-9)
-      if (!/^[6-9]\d{9}$/.test(user.mobile)) {
-        console.error(`User ${user.userId} has invalid mobile format`);
-        return res.status(400).json({
-          success: false,
-          message: 'Invalid registered mobile number. Please contact admin.'
-        });
-      }
-
-      // Generate random 6-digit OTP (now async - returns plain OTP to send)
-      const otp = await user.generateOTP();
-      await user.save();
-      
-      console.log(`🔐 OTP GENERATED for ${user.userId}: ${otp}`);
-      console.log(`📱 Sending OTP to mobile: ${user.mobile}`);
-      console.log(`⏰ OTP expires at: ${user.otp.expiry}`);
-
-      // Send OTP via Fast2SMS Quick Transactional Route
-      const smsResult = await smsService.sendOTP(user.mobile, otp, user._id);
-      
-      console.log(`📨 SMS Result:`, smsResult);
-      
-      if (!smsResult.success) {
-        console.error(`❌ Failed to send OTP for user ${user.userId}:`, smsResult.error);
-        
-        // Clear OTP from user since SMS failed
-        user.otp = undefined;
-        await user.save();
-        
-        // Return HTTP 503 (Service Unavailable) for SMS failures
-        return res.status(503).json({
-          success: false,
-          message: 'OTP service unavailable. Please try again later.',
-          debug: process.env.NODE_ENV === 'development' ? smsResult : undefined
-        });
-      }
-      
-      console.log(`✅ OTP sent successfully to ${user.mobile}`);
-
-      // Mask mobile number for security (show only last 4 digits)
-      const maskedMobile = user.mobile.replace(/^(\d{6})(\d{4})$/, '******$2');
-
-      res.status(200).json({
-        success: true,
-        requiresOtp: true,
-        role: 'owner',
-        message: `OTP sent successfully to ${maskedMobile}`,
-        data: {
-          userId: user.userId,
-          mobile: maskedMobile,
-          otpExpiry: user.otp.expiry,
-          requiresPasswordChange: !user.isPasswordChanged
-        }
-      });
-    } else {
-      // ===== CUSTOMER FLOW: Direct login (NO OTP) =====
-      console.log(`👤 CUSTOMER LOGIN: ${user.userId} - Direct login (no OTP)`);
-      
-      // Generate JWT token directly
-      const token = generateToken(user._id);
-
-      res.status(200).json({
-        success: true,
-        requiresOtp: false,
-        token: token,
-        data: {
-          userId: user.userId,
-          name: user.name,
-          mobile: user.mobile,
-          role: user.role,
-          requiresPasswordChange: !user.isPasswordChanged
-        }
-      });
-    }
+    });
   } catch (error) {
     console.error('Login error:', error);
     res.status(500).json({
