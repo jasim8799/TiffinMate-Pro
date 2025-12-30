@@ -118,6 +118,14 @@ exports.selectMeal = async (req, res) => {
         mealType: 'lunch'
       });
 
+      // Check if it's a default order (cannot be changed)
+      if (existingLunch && existingLunch.selectedMeal?.isDefault) {
+        return res.status(400).json({
+          success: false,
+          message: 'Lunch has been auto-assigned with default menu. Cannot be changed.'
+        });
+      }
+
       if (existingLunch) {
         existingLunch.selectedMeal = lunch;
         await existingLunch.save();
@@ -142,6 +150,14 @@ exports.selectMeal = async (req, res) => {
         deliveryDate: deliveryMoment.toDate(),
         mealType: 'dinner'
       });
+
+      // Check if it's a default order (cannot be changed)
+      if (existingDinner && existingDinner.selectedMeal?.isDefault) {
+        return res.status(400).json({
+          success: false,
+          message: 'Dinner has been auto-assigned with default menu. Cannot be changed.'
+        });
+      }
 
       if (existingDinner) {
         existingDinner.selectedMeal = dinner;
@@ -201,21 +217,25 @@ exports.getMyMealSelection = async (req, res) => {
     const dinnerCutoff = deliveryMoment.clone().hour(11).minute(0).second(0);
     const now = moment();
 
-    // Get selected meals
+    // Get selected meals and check if default
     let lunchMeal = null;
     let dinnerMeal = null;
+    let lunchIsDefault = false;
+    let dinnerIsDefault = false;
     
     mealOrders.forEach(order => {
       if (order.mealType === 'lunch') {
         lunchMeal = order.selectedMeal;
+        lunchIsDefault = order.selectedMeal?.isDefault || false;
       } else if (order.mealType === 'dinner') {
         dinnerMeal = order.selectedMeal;
+        dinnerIsDefault = order.selectedMeal?.isDefault || false;
       }
     });
 
-    // Check if locked
-    const lunchLocked = now.isAfter(lunchCutoff);
-    const dinnerLocked = now.isAfter(dinnerCutoff);
+    // Check if locked (either past cutoff or default assigned)
+    const lunchLocked = now.isAfter(lunchCutoff) || lunchIsDefault;
+    const dinnerLocked = now.isAfter(dinnerCutoff) || dinnerIsDefault;
 
     // Get default meals
     const defaultMeals = await DefaultMeal.find({ isActive: true });
@@ -235,6 +255,8 @@ exports.getMyMealSelection = async (req, res) => {
         dinner: dinnerMeal,
         lunchLocked: lunchLocked,
         dinnerLocked: dinnerLocked,
+        lunchIsDefault: lunchIsDefault,
+        dinnerIsDefault: dinnerIsDefault,
         lunchCutoff: lunchCutoff.toISOString(),
         dinnerCutoff: dinnerCutoff.toISOString(),
         defaultMeals: defaultMeals,

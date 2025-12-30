@@ -2,6 +2,7 @@ const cron = require('node-cron');
 const Subscription = require('../models/Subscription');
 const User = require('../models/User');
 const Payment = require('../models/Payment');
+const MealOrder = require('../models/MealOrder');
 const smsService = require('./smsService');
 const logger = require('../utils/logger');
 const moment = require('moment');
@@ -204,6 +205,120 @@ class CronService {
     return job;
   }
 
+  // Auto-assign default meals at cutoff times
+  // Lunch cutoff: 11 PM (23:00) night before
+  // Dinner cutoff: 11 AM (11:00) same day
+  autoAssignDefaultMeals() {
+    // Run at 11:05 PM every night for next day's lunch
+    const lunchJob = cron.schedule('5 23 * * *', async () => {
+      const jobName = 'Auto-assign Default Lunch';
+      logger.info(`Running: ${jobName}`);
+      
+      try {
+        const tomorrow = moment().add(1, 'day').startOf('day');
+        await this.assignDefaultMealsForType(tomorrow.toDate(), 'lunch');
+        logger.success(`${jobName} completed`);
+      } catch (error) {
+        logger.error(`${jobName} failed`, error);
+      }
+    });
+
+    // Run at 11:05 AM every day for today's dinner
+    const dinnerJob = cron.schedule('5 11 * * *', async () => {
+      const jobName = 'Auto-assign Default Dinner';
+      logger.info(`Running: ${jobName}`);
+      
+      try {
+        const today = moment().startOf('day');
+        await this.assignDefaultMealsForType(today.toDate(), 'dinner');
+        logger.success(`${jobName} completed`);
+      } catch (error) {
+        logger.error(`${jobName} failed`, error);
+      }
+    });
+
+    this.jobs.push({ name: 'autoAssignLunch', job: lunchJob });
+    this.jobs.push({ name: 'autoAssignDinner', job: dinnerJob });
+    return { lunchJob, dinnerJob };
+  }
+
+  // Helper method to assign default meals
+  async assignDefaultMealsForType(deliveryDate, mealType) {
+    try {
+      // Get all active subscriptions
+      const subscriptions = await Subscription.find({
+        status: 'active',
+        startDate: { $lte: deliveryDate },
+        endDate: { $gte: deliveryDate }
+      }).populate('user');
+
+      let assignedCount = 0;
+
+      for (const subscription of subscriptions) {
+        try {
+          // Check if user already has a meal order for this date and type
+          const existingOrder = await MealOrder.findOne({
+            user: subscription.user._id,
+            deliveryDate: deliveryDate,
+            mealType: mealType
+          });
+
+          if (existingOrder) {
+            // User already selected, skip
+            continue;
+          }
+
+          // Get dietary preference
+          const dietaryPreference = subscription.mealPreferences?.dietaryPreference || 'both';
+
+          // Determine default meal based on preference
+          let defaultMealName;
+          if (dietaryPreference === 'veg') {
+            defaultMealName = mealType === 'lunch' ? 'Dal Rice with Seasonal Veg' : 'Roti Sabzi with Dal';
+          } else if (dietaryPreference === 'non-veg') {
+            defaultMealName = mealType === 'lunch' ? 'Chicken Curry with Rice' : 'Egg Curry with Roti';
+          } else {
+            // 'both' - default to veg option
+            defaultMealName = mealType === 'lunch' ? 'Dal Rice with Seasonal Veg' : 'Roti Sabzi with Dal';
+          }
+
+          // Calculate cutoff time
+          const deliveryMoment = moment(deliveryDate);
+          const cutoffTime = mealType === 'lunch'
+            ? deliveryMoment.clone().subtract(1, 'day').hour(23).minute(0).second(0)
+            : deliveryMoment.clone().hour(11).minute(0).second(0);
+
+          // Create default meal order
+          await MealOrder.create({
+            user: subscription.user._id,
+            orderDate: new Date(),
+            deliveryDate: deliveryDate,
+            mealType: mealType,
+            selectedMeal: {
+              name: defaultMealName,
+              items: [],
+              isDefault: true
+            },
+            cutoffTime: cutoffTime.toDate(),
+            isAfterCutoff: true,
+            status: 'confirmed'
+          });
+
+          assignedCount++;
+          logger.info(`Assigned default ${mealType} for user ${subscription.user.name}`);
+        } catch (err) {
+          logger.error(`Failed to assign default meal for user ${subscription.user._id}`, err);
+        }
+      }
+
+      logger.success(`Auto-assigned ${assignedCount} default ${mealType} meals for ${moment(deliveryDate).format('DD MMM YYYY')}`);
+      return assignedCount;
+    } catch (error) {
+      logger.error('Error in assignDefaultMealsForType', error);
+      throw error;
+    }
+  }
+
   // Start all cron jobs
   startAllJobs() {
     logger.info('Starting all cron jobs...');
@@ -212,6 +327,7 @@ class CronService {
     this.checkExpiredSubscriptions();
     this.autoDisableExpiredSubscriptions();
     this.checkOverduePayments();
+    this.autoAssignDefaultMeals();
     
     logger.success(`All ${this.jobs.length} cron jobs started successfully`);
   }
