@@ -3,6 +3,7 @@ const Subscription = require('../models/Subscription');
 const User = require('../models/User');
 const Payment = require('../models/Payment');
 const MealOrder = require('../models/MealOrder');
+const Delivery = require('../models/Delivery');
 const smsService = require('./smsService');
 const logger = require('../utils/logger');
 const moment = require('moment');
@@ -319,6 +320,57 @@ class CronService {
     }
   }
 
+  // Auto-mark deliveries as delivered after 1 hour
+  autoMarkDelivered() {
+    // Run every 10 minutes to check for overdue deliveries
+    const job = cron.schedule('*/10 * * * *', async () => {
+      const jobName = 'Auto Mark Delivered';
+      logger.info(`Running: ${jobName}`);
+      
+      try {
+        const oneHourAgo = moment().subtract(1, 'hour').toDate();
+
+        // Find deliveries that are "on-the-way" for more than 1 hour
+        const overdueDeliveries = await Delivery.find({
+          status: 'on-the-way',
+          outForDeliveryTime: { $lte: oneHourAgo }
+        }).populate('user subscription');
+
+        let markedCount = 0;
+        for (const delivery of overdueDeliveries) {
+          try {
+            // Auto-mark as delivered
+            await delivery.updateStatus('delivered');
+            
+            // Send SMS notification
+            const user = delivery.user;
+            await smsService.sendDeliveryDelivered(user.mobile, user.name, user._id);
+            
+            // Mark day as used in subscription
+            const subscription = delivery.subscription;
+            if (subscription) {
+              await subscription.markDayUsed();
+            }
+
+            markedCount++;
+            logger.info(`Auto-marked delivery ${delivery._id} as delivered for user ${user.name}`);
+          } catch (err) {
+            logger.error(`Failed to auto-mark delivery ${delivery._id}`, err);
+          }
+        }
+
+        if (markedCount > 0) {
+          logger.success(`Auto-marked ${markedCount} deliveries as delivered`);
+        }
+      } catch (error) {
+        logger.error('Error in autoMarkDelivered', error);
+      }
+    });
+
+    this.jobs.push({ name: jobName, job });
+    logger.info(`Scheduled: ${jobName} - Every 10 minutes`);
+  }
+
   // Start all cron jobs
   startAllJobs() {
     logger.info('Starting all cron jobs...');
@@ -328,6 +380,7 @@ class CronService {
     this.autoDisableExpiredSubscriptions();
     this.checkOverduePayments();
     this.autoAssignDefaultMeals();
+    this.autoMarkDelivered();
     
     logger.success(`All ${this.jobs.length} cron jobs started successfully`);
   }
