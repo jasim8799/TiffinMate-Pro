@@ -322,9 +322,10 @@ class CronService {
 
   // Auto-mark deliveries as delivered after 1 hour
   autoMarkDelivered() {
+    const jobName = 'Auto Mark Delivered';
+    
     // Run every 10 minutes to check for overdue deliveries
     const job = cron.schedule('*/10 * * * *', async () => {
-      const jobName = 'Auto Mark Delivered';
       logger.info(`Running: ${jobName}`);
       
       try {
