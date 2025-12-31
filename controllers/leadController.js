@@ -1,5 +1,6 @@
 const Lead = require('../models/Lead');
 const axios = require('axios');
+const { createNotification } = require('./notificationController');
 
 // @desc    Submit lead from out-of-service area
 // @route   POST /api/leads
@@ -47,6 +48,19 @@ exports.submitLead = async (req, res) => {
       console.error('WhatsApp notification failed:', whatsappError.message);
       // Don't fail the request if WhatsApp fails
     }
+
+    // Create in-app notification for owner
+    await createNotification(
+      'NEW_LEAD',
+      `New lead from ${name} - ${distance.toFixed(1)} km away`,
+      lead._id,
+      'Lead',
+      {
+        name: name,
+        phone: phone,
+        distance: distance
+      }
+    );
 
     res.status(201).json({
       success: true,

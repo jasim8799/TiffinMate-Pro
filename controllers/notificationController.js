@@ -109,23 +109,28 @@ exports.markAllAsRead = async (req, res) => {
 };
 
 // Helper function to create notification
-exports.createNotification = async (type, message, relatedId = null, relatedModel = null) => {
+exports.createNotification = async (type, message, relatedId = null, relatedModel = null, metadata = {}) => {
   try {
     const owner = await User.findOne({ role: 'owner', isActive: true });
     
     if (!owner) {
       console.error('No owner found for notification');
-      return;
+      return null;
     }
 
-    await Notification.create({
+    const notification = await Notification.create({
       userId: owner._id,
       type,
       message,
       relatedId,
-      relatedModel
+      relatedModel,
+      metadata
     });
+
+    console.log(`✅ Notification created: ${type} - ${message}`);
+    return notification;
   } catch (error) {
     console.error('Create notification error:', error);
+    return null;
   }
 };

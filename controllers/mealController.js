@@ -4,6 +4,7 @@ const Delivery = require('../models/Delivery');
 const WeeklyMenu = require('../models/WeeklyMenu');
 const Subscription = require('../models/Subscription');
 const moment = require('moment');
+const { createNotification } = require('./notificationController');
 
 // @desc    Select meal for specific date
 // @route   POST /api/meals/select
@@ -175,6 +176,26 @@ exports.selectMeal = async (req, res) => {
         });
       }
     }
+
+    // Create notification for owner
+    const User = require('../models/User');
+    const user = await User.findById(req.user._id);
+    const mealNames = [];
+    if (lunch) mealNames.push(`Lunch: ${lunch.name}`);
+    if (dinner) mealNames.push(`Dinner: ${dinner.name}`);
+    
+    await createNotification(
+      'MEAL_ORDERED',
+      `${user?.name || 'Customer'} ordered meals for ${deliveryMoment.format('DD MMM')} - ${mealNames.join(', ')}`,
+      null,
+      null,
+      {
+        customerName: user?.name,
+        customerId: user?.userId,
+        deliveryDate: deliveryMoment.format('YYYY-MM-DD'),
+        meals: mealNames
+      }
+    );
 
     res.status(200).json({
       success: true,

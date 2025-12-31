@@ -31,7 +31,8 @@ exports.protect = async (req, res, next) => {
       if (!req.user.isActive) {
         return res.status(403).json({
           success: false,
-          message: 'Your account has been disabled. Please contact support.'
+          message: 'Your account has been disabled. Please contact support.',
+          accountStatus: 'deactivated'
         });
       }
 

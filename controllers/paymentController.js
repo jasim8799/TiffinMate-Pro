@@ -2,6 +2,7 @@ const Payment = require('../models/Payment');
 const Subscription = require('../models/Subscription');
 const User = require('../models/User');
 const moment = require('moment');
+const { createNotification } = require('./notificationController');
 
 // UPI Configuration
 const UPI_CONFIG = {
@@ -50,6 +51,21 @@ exports.createPayment = async (req, res) => {
       referenceNote: referenceNote || '',
       paymentDate: new Date()
     });
+
+    // Create notification for owner
+    const user = await User.findById(req.user._id);
+    await createNotification(
+      'PAYMENT_RECEIVED',
+      `New payment of ₹${amount} received from ${user?.name || 'customer'}`,
+      payment._id,
+      'Payment',
+      {
+        amount: amount,
+        customerName: user?.name,
+        customerId: user?.userId,
+        status: 'pending'
+      }
+    );
 
     // Generate UPI payment link
     const upiLink = `upi://pay?pa=${UPI_CONFIG.upiId}&pn=${encodeURIComponent(UPI_CONFIG.name)}&am=${amount}&cu=INR&tn=${encodeURIComponent(referenceNote || 'Payment for meal subscription')}`;
@@ -208,6 +224,21 @@ exports.verifyPayment = async (req, res) => {
       .populate('user', 'name mobile userId')
       .populate('subscription', 'planType startDate endDate status')
       .populate('verifiedBy', 'name');
+
+    // Create notification for owner
+    if (status === 'verified') {
+      await createNotification(
+        'PAYMENT_VERIFIED',
+        `Payment of ₹${payment.amount} verified for ${populatedPayment.user?.name || 'customer'}`,
+        payment._id,
+        'Payment',
+        {
+          amount: payment.amount,
+          customerName: populatedPayment.user?.name,
+          customerId: populatedPayment.user?.userId
+        }
+      );
+    }
 
     res.status(200).json({
       success: true,

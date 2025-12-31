@@ -401,9 +401,17 @@ exports.toggleUserActive = async (req, res) => {
 // @access  Private (Owner only)
 exports.getCustomers = async (req, res) => {
   try {
+    // Get ALL customers regardless of isActive status
     const customers = await User.find({ role: 'customer' })
       .select('-password -otp')
       .sort({ createdAt: -1 });
+
+    console.log(`📊 Found ${customers.length} customers in database`);
+    
+    // Log each customer for debugging
+    customers.forEach(customer => {
+      console.log(`  - ${customer.name} (${customer.mobile}) - Active: ${customer.isActive}`);
+    });
 
     res.status(200).json({
       success: true,

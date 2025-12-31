@@ -8,7 +8,26 @@ const notificationSchema = new mongoose.Schema({
   },
   type: {
     type: String,
-    enum: ['NEW_USER', 'PAYMENT_PENDING', 'PAYMENT_VERIFIED', 'SUBSCRIPTION_EXPIRING', 'SUBSCRIPTION_EXPIRED'],
+    enum: [
+      'NEW_USER',
+      'NEW_CUSTOMER',
+      'PAYMENT_PENDING',
+      'PAYMENT_RECEIVED',
+      'PAYMENT_VERIFIED',
+      'PAYMENT_FAILED',
+      'MEAL_ORDERED',
+      'MEAL_CHANGED',
+      'SUBSCRIPTION_CREATED',
+      'SUBSCRIPTION_EXPIRING',
+      'SUBSCRIPTION_EXPIRED',
+      'SUBSCRIPTION_RENEWED',
+      'DELIVERY_SCHEDULED',
+      'DELIVERY_COMPLETED',
+      'NEW_LEAD',
+      'CUSTOMER_COMPLAINT',
+      'LOW_STOCK',
+      'OTHER'
+    ],
     required: true
   },
   message: {
@@ -21,7 +40,11 @@ const notificationSchema = new mongoose.Schema({
   },
   relatedModel: {
     type: String,
-    enum: ['User', 'Payment', 'Subscription']
+    enum: ['User', 'Payment', 'Subscription', 'MealOrder', 'Delivery', 'Lead']
+  },
+  metadata: {
+    type: mongoose.Schema.Types.Mixed,
+    default: {}
   },
   read: {
     type: Boolean,
