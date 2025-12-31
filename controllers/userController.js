@@ -365,17 +365,20 @@ exports.updateUser = async (req, res) => {
       });
     }
 
-    // Only owner can update other users
-    if (req.user.role !== 'owner' && req.user._id.toString() !== req.params.id) {
-      return res.status(403).json({
-        success: false,
-        message: 'Not authorized to update this user'
-      });
-    }
-
+    // Update fields
     if (name) user.name = name;
     if (mobile) user.mobile = mobile;
-    if (address) user.address = address;
+    if (address !== undefined) {
+      // Handle address as string or object
+      if (typeof address === 'string') {
+        user.address = { street: address, landmark: '' };
+      } else if (address && typeof address === 'object') {
+        user.address = {
+          street: address.street || address.address || '',
+          landmark: address.landmark || ''
+        };
+      }
+    }
 
     await user.save();
 

@@ -25,7 +25,7 @@ router.post('/create', protect, authorize('owner'), createCustomer);
 router.get('/', protect, authorize('owner'), getAllUsers);
 router.get('/customers', protect, authorize('owner'), getCustomers);
 router.get('/:id', protect, getUserById);
-router.patch('/:id', protect, updateUser);
+router.patch('/:id', protect, authorize('owner'), updateUser);
 router.patch('/:id/toggle-active', protect, authorize('owner'), toggleUserActive);
 
 module.exports = router;
