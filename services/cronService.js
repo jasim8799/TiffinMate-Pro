@@ -372,6 +372,94 @@ class CronService {
     logger.info(`Scheduled: ${jobName} - Every 10 minutes`);
   }
 
+  // Create deliveries from meal orders (runs at 5 AM daily)
+  autoCreateDeliveries() {
+    const jobName = 'Auto Create Deliveries';
+    
+    // Run at 5:00 AM every day to create deliveries for today
+    const job = cron.schedule('0 5 * * *', async () => {
+      logger.info(`Running: ${jobName}`);
+      
+      try {
+        const today = moment().startOf('day').toDate();
+        const tomorrow = moment().add(1, 'day').startOf('day').toDate();
+
+        // Get all confirmed meal orders for today that don't have deliveries yet
+        const mealOrders = await MealOrder.find({
+          deliveryDate: { $gte: today, $lt: tomorrow },
+          status: 'confirmed'
+        }).populate('user');
+
+        let createdCount = 0;
+
+        for (const mealOrder of mealOrders) {
+          try {
+            // Check if delivery already exists
+            const existingDelivery = await Delivery.findOne({
+              user: mealOrder.user._id,
+              deliveryDate: mealOrder.deliveryDate,
+              mealType: mealOrder.mealType
+            });
+
+            if (existingDelivery) {
+              continue; // Skip if delivery already exists
+            }
+
+            // Get user's active subscription
+            const subscription = await Subscription.findOne({
+              user: mealOrder.user._id,
+              status: 'active',
+              startDate: { $lte: mealOrder.deliveryDate },
+              endDate: { $gte: mealOrder.deliveryDate }
+            });
+
+            if (!subscription) {
+              logger.warn(`No active subscription for user ${mealOrder.user.name}`);
+              continue;
+            }
+
+            // Create delivery
+            const meals = {};
+            if (mealOrder.mealType === 'lunch' || mealOrder.mealType === 'both') {
+              meals.lunch = {
+                name: mealOrder.selectedMeal.name,
+                items: mealOrder.selectedMeal.items || []
+              };
+            }
+            if (mealOrder.mealType === 'dinner' || mealOrder.mealType === 'both') {
+              meals.dinner = {
+                name: mealOrder.selectedMeal.name,
+                items: mealOrder.selectedMeal.items || []
+              };
+            }
+
+            await Delivery.create({
+              user: mealOrder.user._id,
+              subscription: subscription._id,
+              deliveryDate: mealOrder.deliveryDate,
+              mealType: mealOrder.mealType,
+              meals: meals,
+              status: 'preparing',
+              notes: mealOrder.notes
+            });
+
+            createdCount++;
+            logger.info(`Created delivery for ${mealOrder.user.name} - ${mealOrder.mealType}`);
+          } catch (err) {
+            logger.error(`Failed to create delivery for order ${mealOrder._id}`, err);
+          }
+        }
+
+        logger.success(`${jobName} completed: ${createdCount} deliveries created`);
+      } catch (error) {
+        logger.error(`${jobName} failed`, error);
+      }
+    });
+
+    this.jobs.push({ name: jobName, job });
+    logger.info(`Scheduled: ${jobName} - Daily at 5:00 AM`);
+  }
+
   // Start all cron jobs
   startAllJobs() {
     logger.info('Starting all cron jobs...');
@@ -382,6 +470,7 @@ class CronService {
     this.checkOverduePayments();
     this.autoAssignDefaultMeals();
     this.autoMarkDelivered();
+    this.autoCreateDeliveries();
     
     logger.success(`All ${this.jobs.length} cron jobs started successfully`);
   }

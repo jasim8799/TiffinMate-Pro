@@ -1,6 +1,7 @@
 const Delivery = require('../models/Delivery');
 const Subscription = require('../models/Subscription');
 const User = require('../models/User');
+const MealOrder = require('../models/MealOrder');
 const smsService = require('../services/smsService');
 const moment = require('moment');
 
@@ -309,6 +310,103 @@ exports.getDelivery = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Error fetching delivery',
+      error: error.message
+    });
+  }
+};
+
+// @desc    Auto-create deliveries from today's meal orders
+// @route   POST /api/deliveries/auto-create-today
+// @access  Private (Owner only)
+exports.autoCreateTodaysDeliveries = async (req, res) => {
+  try {
+    const today = moment().startOf('day').toDate();
+    const tomorrow = moment().add(1, 'day').startOf('day').toDate();
+
+    // Get all confirmed meal orders for today
+    const mealOrders = await MealOrder.find({
+      deliveryDate: { $gte: today, $lt: tomorrow },
+      status: 'confirmed'
+    }).populate('user');
+
+    let createdCount = 0;
+    let skippedCount = 0;
+    const errors = [];
+
+    for (const mealOrder of mealOrders) {
+      try {
+        // Check if delivery already exists
+        const existingDelivery = await Delivery.findOne({
+          user: mealOrder.user._id,
+          deliveryDate: mealOrder.deliveryDate,
+          mealType: mealOrder.mealType
+        });
+
+        if (existingDelivery) {
+          skippedCount++;
+          continue;
+        }
+
+        // Get user's active subscription
+        const subscription = await Subscription.findOne({
+          user: mealOrder.user._id,
+          status: 'active',
+          startDate: { $lte: mealOrder.deliveryDate },
+          endDate: { $gte: mealOrder.deliveryDate }
+        });
+
+        if (!subscription) {
+          errors.push(`No active subscription for ${mealOrder.user.name}`);
+          continue;
+        }
+
+        // Create delivery with meals structure
+        const meals = {};
+        if (mealOrder.mealType === 'lunch' || mealOrder.mealType === 'both') {
+          meals.lunch = {
+            name: mealOrder.selectedMeal?.name || 'Default Meal',
+            items: mealOrder.selectedMeal?.items || []
+          };
+        }
+        if (mealOrder.mealType === 'dinner' || mealOrder.mealType === 'both') {
+          meals.dinner = {
+            name: mealOrder.selectedMeal?.name || 'Default Meal',
+            items: mealOrder.selectedMeal?.items || []
+          };
+        }
+
+        await Delivery.create({
+          user: mealOrder.user._id,
+          subscription: subscription._id,
+          deliveryDate: mealOrder.deliveryDate,
+          mealType: mealOrder.mealType,
+          meals: meals,
+          status: 'preparing',
+          notes: mealOrder.notes
+        });
+
+        createdCount++;
+      } catch (err) {
+        console.error(`Error creating delivery for order ${mealOrder._id}:`, err);
+        errors.push(`Failed for ${mealOrder.user.name}: ${err.message}`);
+      }
+    }
+
+    res.status(200).json({
+      success: true,
+      message: `Created ${createdCount} deliveries, skipped ${skippedCount} existing`,
+      data: {
+        created: createdCount,
+        skipped: skippedCount,
+        total: mealOrders.length,
+        errors: errors
+      }
+    });
+  } catch (error) {
+    console.error('Auto-create deliveries error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error creating deliveries',
       error: error.message
     });
   }

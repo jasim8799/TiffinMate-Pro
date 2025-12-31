@@ -8,11 +8,13 @@ const {
   getMyDeliveries,
   getMyTodayDelivery,
   getKitchenSummary,
-  getDelivery
+  getDelivery,
+  autoCreateTodaysDeliveries
 } = require('../controllers/deliveryController');
 const { protect, authorize } = require('../middleware/auth');
 
 router.post('/', protect, authorize('owner'), createDelivery);
+router.post('/auto-create-today', protect, authorize('owner'), autoCreateTodaysDeliveries);
 router.get('/today', protect, authorize('owner', 'delivery'), getTodaysDeliveries);
 router.get('/kitchen-summary', protect, authorize('owner'), getKitchenSummary);
 router.get('/my', protect, authorize('customer'), getMyDeliveries);
