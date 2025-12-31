@@ -24,10 +24,12 @@ const userSchema = new mongoose.Schema({
     trim: true,
     validate: {
       validator: function(v) {
-        // Indian mobile number validation: 10 digits, starts with 6-9
-        return /^[6-9]\d{9}$/.test(v);
+        // Remove spaces, dashes, and plus signs
+        const cleaned = v.replace(/[\s\-\+]/g, '');
+        // Accept 10-15 digit numbers (international format)
+        return /^\d{10,15}$/.test(cleaned);
       },
-      message: props => `${props.value} is not a valid Indian mobile number! Must be 10 digits starting with 6-9.`
+      message: props => `${props.value} is not a valid mobile number! Must be 10-15 digits.`
     }
   },
   address: {
