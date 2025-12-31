@@ -1,4 +1,6 @@
 const User = require('../models/User');
+const Subscription = require('../models/Subscription');
+const moment = require('moment');
 const smsService = require('../services/smsService');
 const { createNotification } = require('./notificationController');
 
@@ -207,6 +209,32 @@ exports.createCustomer = async (req, res) => {
     // Create user in database
     const user = await User.create(userData);
 
+    // Create a pending subscription for the new customer
+    let subscription = null;
+    if (plan && mealType && duration) {
+      try {
+        const startDate = moment();
+        const durationDays = parseInt(duration) || 30;
+        const endDate = moment(startDate).add(durationDays, 'days');
+
+        subscription = await Subscription.create({
+          user: user._id,
+          planType: plan.toLowerCase(),
+          mealType: mealType.toLowerCase(),
+          startDate: startDate.toDate(),
+          endDate: endDate.toDate(),
+          amount: 0, // Will be set when owner activates
+          status: 'pending',
+          createdBy: req.user._id
+        });
+
+        console.log('✅ Pending subscription created for new customer:', subscription._id);
+      } catch (subError) {
+        console.error('⚠️ Failed to create subscription (non-critical):', subError);
+        // Continue even if subscription creation fails
+      }
+    }
+
     // Send SMS with credentials
     try {
       const smsMessage = `Welcome to The Home Kitchen! Your User ID is ${userId} and Temporary Password is ${tempPassword}. Please login and change your password.`;
@@ -238,7 +266,9 @@ exports.createCustomer = async (req, res) => {
         userId,
         tempPassword, // Return for owner to share with customer
         name,
-        mobile
+        mobile,
+        subscriptionId: subscription?._id,
+        subscriptionStatus: subscription?.status || 'none'
       }
     });
 
