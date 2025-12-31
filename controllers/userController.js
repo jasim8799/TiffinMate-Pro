@@ -397,10 +397,13 @@ exports.toggleUserActive = async (req, res) => {
 };
 
 // @desc    Get customers only
+// @desc    Get all customers with their subscription details
 // @route   GET /api/users/customers
 // @access  Private (Owner only)
 exports.getCustomers = async (req, res) => {
   try {
+    const Subscription = require('../models/Subscription');
+    
     // Get ALL customers regardless of isActive status
     const customers = await User.find({ role: 'customer' })
       .select('-password -otp')
@@ -408,15 +411,45 @@ exports.getCustomers = async (req, res) => {
 
     console.log(`📊 Found ${customers.length} customers in database`);
     
-    // Log each customer for debugging
-    customers.forEach(customer => {
-      console.log(`  - ${customer.name} (${customer.mobile}) - Active: ${customer.isActive}`);
-    });
+    // Get active subscription for each customer
+    const customersWithSubscriptions = await Promise.all(
+      customers.map(async (customer) => {
+        // Find the most recent active or pending subscription
+        const activeSubscription = await Subscription.findOne({
+          user: customer._id,
+          status: { $in: ['active', 'pending', 'paused'] }
+        })
+        .sort({ createdAt: -1 })
+        .lean();
+
+        const customerData = customer.toObject();
+        
+        // Add subscription data if exists
+        if (activeSubscription) {
+          customerData.subscription = {
+            _id: activeSubscription._id,
+            status: activeSubscription.status,
+            planType: activeSubscription.planType,
+            amount: activeSubscription.amount,
+            startDate: activeSubscription.startDate,
+            endDate: activeSubscription.endDate,
+            remainingDays: activeSubscription.remainingDays,
+            daysUsed: activeSubscription.daysUsed || 0,
+          };
+          console.log(`  ✅ ${customer.name} - Has ${activeSubscription.status} subscription`);
+        } else {
+          customerData.subscription = null;
+          console.log(`  ⚠️ ${customer.name} - No active subscription`);
+        }
+        
+        return customerData;
+      })
+    );
 
     res.status(200).json({
       success: true,
-      count: customers.length,
-      data: customers
+      count: customersWithSubscriptions.length,
+      data: customersWithSubscriptions
     });
   } catch (error) {
     console.error('Get customers error:', error);
