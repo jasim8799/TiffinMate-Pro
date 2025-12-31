@@ -208,7 +208,16 @@ exports.updateSubscriptionStatus = async (req, res) => {
       });
     }
 
-    const subscription = await Subscription.findById(req.params.id);
+    // Use findByIdAndUpdate to directly update status without triggering full validation
+    const subscription = await Subscription.findByIdAndUpdate(
+      req.params.id,
+      { status: status },
+      { 
+        new: true, // Return updated document
+        runValidators: false, // Skip validation to avoid issues with legacy data
+        populate: 'user' // Populate user for consistent response
+      }
+    );
 
     if (!subscription) {
       console.log('❌ Subscription not found:', req.params.id);
@@ -218,16 +227,10 @@ exports.updateSubscriptionStatus = async (req, res) => {
       });
     }
 
-    console.log('✅ Found subscription:', {
+    console.log('✅ Status updated successfully:', {
       id: subscription._id,
-      currentStatus: subscription.status,
-      newStatus: status
+      newStatus: subscription.status
     });
-
-    subscription.status = status;
-    await subscription.save();
-
-    console.log('✅ Status updated successfully');
 
     res.status(200).json({
       success: true,
