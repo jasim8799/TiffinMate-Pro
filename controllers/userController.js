@@ -159,13 +159,38 @@ const generateTempPassword = () => {
 // @access  Private (Owner only)
 exports.createCustomer = async (req, res) => {
   try {
-    const { name, mobile, address, landmark, plan, mealType, duration } = req.body;
+    const { userId, password, name, mobile, address, landmark, plan, mealType, duration } = req.body;
 
     // Validate required fields
-    if (!name || !mobile) {
+    if (!userId || !password || !name || !mobile) {
       return res.status(400).json({
         success: false,
-        message: 'Name and mobile number are required'
+        message: 'User ID, password, name, and mobile are required'
+      });
+    }
+
+    // Validate userId format
+    if (userId.length < 4) {
+      return res.status(400).json({
+        success: false,
+        message: 'User ID must be at least 4 characters'
+      });
+    }
+
+    // Validate password length
+    if (password.length < 6) {
+      return res.status(400).json({
+        success: false,
+        message: 'Password must be at least 6 characters'
+      });
+    }
+
+    // Check if userId already exists
+    const existingUserId = await User.findOne({ userId });
+    if (existingUserId) {
+      return res.status(400).json({
+        success: false,
+        message: 'User ID already exists. Please choose a different one.'
       });
     }
 
@@ -178,21 +203,15 @@ exports.createCustomer = async (req, res) => {
       });
     }
 
-    // Generate unique userId
-    const userId = await generateCustomerId();
-
-    // Generate temporary password
-    const tempPassword = generateTempPassword();
-
     // Create user object
     const userData = {
       userId,
-      password: tempPassword,
+      password,
       name,
       mobile,
       role: 'customer',
       isActive: true,
-      forcePasswordChange: true,
+      forcePasswordChange: false, // Don't force password change since owner sets it
       createdBy: req.user._id
     };
 
@@ -209,7 +228,7 @@ exports.createCustomer = async (req, res) => {
 
     // Send SMS with credentials
     try {
-      const smsMessage = `Welcome to The Home Kitchen! Your User ID is ${userId} and Temporary Password is ${tempPassword}. Please login and change your password.`;
+      const smsMessage = `Welcome to The Home Kitchen! Your User ID is ${userId} and Password is ${password}. Please login to start ordering delicious tiffins!`;
       
       await smsService.sendSMS(
         mobile,
@@ -236,7 +255,7 @@ exports.createCustomer = async (req, res) => {
       message: 'Customer created successfully',
       data: {
         userId,
-        tempPassword, // Return for owner to share with customer
+        password, // Return for owner confirmation
         name,
         mobile
       }
