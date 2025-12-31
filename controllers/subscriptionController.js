@@ -194,24 +194,40 @@ exports.updateSubscriptionStatus = async (req, res) => {
   try {
     const { status } = req.body;
 
-    if (!status || !['active', 'paused', 'expired', 'disabled'].includes(status)) {
+    console.log('📝 Update Status Request:', {
+      subscriptionId: req.params.id,
+      requestedStatus: status,
+      userId: req.user._id
+    });
+
+    if (!status || !['pending', 'active', 'paused', 'expired', 'disabled'].includes(status)) {
+      console.log('❌ Invalid status:', status);
       return res.status(400).json({
         success: false,
-        message: 'Invalid status'
+        message: `Invalid status: ${status}. Must be one of: pending, active, paused, expired, disabled`
       });
     }
 
     const subscription = await Subscription.findById(req.params.id);
 
     if (!subscription) {
+      console.log('❌ Subscription not found:', req.params.id);
       return res.status(404).json({
         success: false,
         message: 'Subscription not found'
       });
     }
 
+    console.log('✅ Found subscription:', {
+      id: subscription._id,
+      currentStatus: subscription.status,
+      newStatus: status
+    });
+
     subscription.status = status;
     await subscription.save();
+
+    console.log('✅ Status updated successfully');
 
     res.status(200).json({
       success: true,
@@ -219,7 +235,12 @@ exports.updateSubscriptionStatus = async (req, res) => {
       data: subscription
     });
   } catch (error) {
-    console.error('Update status error:', error);
+    console.error('❌ Update status error:', error);
+    console.error('Error details:', {
+      name: error.name,
+      message: error.message,
+      stack: error.stack
+    });
     res.status(500).json({
       success: false,
       message: 'Error updating subscription status',
