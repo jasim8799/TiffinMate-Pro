@@ -4,6 +4,7 @@ const {
   getAllUsers,
   getUserById,
   updateUser,
+  deleteUser,
   toggleUserActive,
   getCustomers,
   createCustomer,
@@ -26,6 +27,7 @@ router.get('/', protect, authorize('owner'), getAllUsers);
 router.get('/customers', protect, authorize('owner'), getCustomers);
 router.get('/:id', protect, getUserById);
 router.patch('/:id', protect, authorize('owner'), updateUser);
+router.delete('/:id', protect, authorize('owner'), deleteUser);
 router.patch('/:id/toggle-active', protect, authorize('owner'), toggleUserActive);
 
 module.exports = router;

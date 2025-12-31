@@ -429,6 +429,40 @@ exports.toggleUserActive = async (req, res) => {
   }
 };
 
+// @desc    Delete user (soft delete)
+// @route   DELETE /api/users/:id
+// @access  Private (Owner only)
+exports.deleteUser = async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id);
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    // Soft delete by marking as inactive and adding deleted flag
+    user.isActive = false;
+    user.deletedAt = new Date();
+    await user.save();
+
+    res.status(200).json({
+      success: true,
+      message: 'User deleted successfully',
+      data: user
+    });
+  } catch (error) {
+    console.error('Delete user error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error deleting user',
+      error: error.message
+    });
+  }
+};
+
 // @desc    Get customers only
 // @desc    Get all customers with their subscription details
 // @route   GET /api/users/customers
