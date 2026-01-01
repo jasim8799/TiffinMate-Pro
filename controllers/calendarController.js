@@ -14,9 +14,11 @@ exports.getMyCalendar = async (req, res) => {
     });
 
     if (!subscription) {
-      return res.status(404).json({
-        success: false,
-        message: 'No active subscription found'
+      // Return success with empty data instead of 404
+      return res.status(200).json({
+        success: true,
+        message: 'No active subscription',
+        data: []
       });
     }
 
