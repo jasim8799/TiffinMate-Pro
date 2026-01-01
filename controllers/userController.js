@@ -566,41 +566,154 @@ exports.deleteUser = async (req, res) => {
       });
     }
 
-    // Soft delete by marking as inactive and adding deleted flag
+    const userId = user._id;
+    const userName = user.name;
+    const userIdString = user.userId;
+
+    console.log(`🗑️ Starting cascade delete for user: ${userName} (${userIdString})`);
+
+    // ========== CASCADE DELETE ALL RELATED DATA ==========
+    
+    // Import all required models
+    const Subscription = require('../models/Subscription');
+    const Payment = require('../models/Payment');
+    const MealOrder = require('../models/MealOrder');
+    const Delivery = require('../models/Delivery');
+    const Pause = require('../models/Pause');
+    const ExtraTiffin = require('../models/ExtraTiffin');
+    const AppNotification = require('../models/AppNotification');
+    const Notification = require('../models/Notification');
+
+    // Track deletion counts for logging
+    const deletionStats = {
+      subscriptions: 0,
+      payments: 0,
+      mealOrders: 0,
+      deliveries: 0,
+      pauses: 0,
+      extraTiffins: 0,
+      notifications: 0
+    };
+
+    try {
+      // 1. Delete/Cancel all subscriptions
+      const subscriptions = await Subscription.updateMany(
+        { user: userId },
+        { 
+          $set: { 
+            status: 'cancelled',
+            isActive: false,
+            deletedAt: new Date(),
+            cancelledReason: 'User account deleted'
+          }
+        }
+      );
+      deletionStats.subscriptions = subscriptions.modifiedCount;
+      console.log(`  ✅ Cancelled ${deletionStats.subscriptions} subscriptions`);
+
+      // 2. Mark all payments as inactive
+      const payments = await Payment.updateMany(
+        { user: userId },
+        { 
+          $set: { 
+            isActive: false,
+            deletedAt: new Date()
+          }
+        }
+      );
+      deletionStats.payments = payments.modifiedCount;
+      console.log(`  ✅ Marked ${deletionStats.payments} payments as inactive`);
+
+      // 3. Delete all meal orders
+      const mealOrders = await MealOrder.deleteMany({ user: userId });
+      deletionStats.mealOrders = mealOrders.deletedCount;
+      console.log(`  ✅ Deleted ${deletionStats.mealOrders} meal orders`);
+
+      // 4. Delete all deliveries
+      const deliveries = await Delivery.deleteMany({ user: userId });
+      deletionStats.deliveries = deliveries.deletedCount;
+      console.log(`  ✅ Deleted ${deletionStats.deliveries} deliveries`);
+
+      // 5. Delete all pauses
+      const pauses = await Pause.deleteMany({ user: userId });
+      deletionStats.pauses = pauses.deletedCount;
+      console.log(`  ✅ Deleted ${deletionStats.pauses} pauses`);
+
+      // 6. Delete all extra tiffins
+      const extraTiffins = await ExtraTiffin.deleteMany({ user: userId });
+      deletionStats.extraTiffins = extraTiffins.deletedCount;
+      console.log(`  ✅ Deleted ${deletionStats.extraTiffins} extra tiffins`);
+
+      // 7. Delete user-specific notifications
+      const notifications = await Notification.deleteMany({ userId: userId });
+      deletionStats.notifications = notifications.deletedCount;
+      console.log(`  ✅ Deleted ${deletionStats.notifications} notifications`);
+
+    } catch (cascadeError) {
+      console.error('⚠️ Error during cascade delete:', cascadeError);
+      // Continue with user deletion even if cascade fails
+    }
+
+    // ========== SOFT DELETE USER ==========
     user.isActive = false;
     user.deletedAt = new Date();
     await user.save();
+    console.log(`  ✅ User marked as deleted`);
 
-    // Create AppNotification for owner dashboard
-    const AppNotification = require('../models/AppNotification');
+    // ========== CREATE DELETION NOTIFICATION ==========
     try {
       await AppNotification.createNotification({
         type: 'user_deleted',
         title: 'Customer Deleted',
-        message: `${user.name} (${user.userId}) has been deactivated`,
-        relatedUser: user._id,
+        message: `${userName} (${userIdString}) and all related data removed`,
+        relatedUser: userId,
         relatedModel: 'User',
-        relatedId: user._id,
+        relatedId: userId,
         priority: 'high',
         metadata: {
-          userId: user.userId,
+          userId: userIdString,
           mobile: user.mobile,
           deletedBy: req.user._id,
-          deletedAt: new Date()
+          deletedAt: new Date(),
+          cascadeStats: deletionStats
         }
       });
     } catch (notifError) {
       console.error('Error creating notification:', notifError);
-      // Continue even if notification fails
     }
 
-    // Emit real-time delete event
-    socketService.emitUserDeleted(user._id.toString());
+    // ========== EMIT REAL-TIME EVENTS ==========
+    socketService.emitUserDeleted(userId.toString());
+
+    // Also emit specific events for data changes
+    if (deletionStats.subscriptions > 0) {
+      socketService.emitSubscriptionUpdated({ userId: userId.toString() });
+    }
+    if (deletionStats.payments > 0) {
+      socketService.emitPaymentReceived({ userId: userId.toString() });
+    }
+    if (deletionStats.mealOrders > 0) {
+      socketService.emitMealUpdated({ userId: userId.toString() });
+    }
+    if (deletionStats.deliveries > 0) {
+      socketService.emitDeliveryUpdated({ userId: userId.toString() });
+    }
+
+    console.log(`✅ CASCADE DELETE COMPLETE for ${userName}`);
+    console.log(`📊 Deletion Stats:`, deletionStats);
 
     res.status(200).json({
       success: true,
-      message: 'User deleted successfully',
-      data: user
+      message: 'User and all related data deleted successfully',
+      data: {
+        user: {
+          _id: user._id,
+          userId: user.userId,
+          name: user.name,
+          deletedAt: user.deletedAt
+        },
+        deletionStats
+      }
     });
   } catch (error) {
     console.error('Delete user error:', error);
