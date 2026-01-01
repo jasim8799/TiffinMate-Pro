@@ -31,11 +31,11 @@ exports.getSubscriptionPlans = async (req, res) => {
       console.log(`🔍 Filtered to ${filteredPlans.length} plans for mealType: ${mealType}`);
     }
     
-    // Return with 'plans' key (Flutter expects this)
+    // Return with 'data' key (consistent with other endpoints)
     res.status(200).json({
       success: true,
       count: filteredPlans.length,
-      plans: filteredPlans
+      data: filteredPlans
     });
   } catch (error) {
     console.error('❌ Error fetching subscription plans:', error);
