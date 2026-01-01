@@ -66,11 +66,13 @@ const calendarRoutes = require('./routes/calendarRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
 const leadRoutes = require('./routes/leadRoutes');
 const appNotificationRoutes = require('./routes/appNotificationRoutes');
+const subscriptionPlanRoutes = require('./routes/subscriptionPlanRoutes');
 
 // API Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/subscriptions', subscriptionRoutes);
+app.use('/api/subscription-plans', subscriptionPlanRoutes);
 app.use('/api/deliveries', deliveryRoutes);
 app.use('/api/meals', mealRoutes);
 app.use('/api/payments', paymentRoutes);
