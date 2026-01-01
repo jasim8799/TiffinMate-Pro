@@ -578,9 +578,32 @@ exports.getAllPayments = async (req, res) => {
       filter.status = status;
     }
 
+    // Get active users only
+    const activeUserIds = await User.find({ 
+      role: 'customer', 
+      isActive: true,
+      deletedAt: { $exists: false }
+    }).distinct('_id');
+
     if (userId) {
-      filter.user = userId;
+      // Only allow if userId is in active users
+      if (activeUserIds.some(id => id.toString() === userId)) {
+        filter.user = userId;
+      } else {
+        // User deleted, return empty
+        return res.status(200).json({
+          success: true,
+          count: 0,
+          data: []
+        });
+      }
+    } else {
+      // Filter all payments by active users
+      filter.user = { $in: activeUserIds };
     }
+
+    // Also filter by isActive payments
+    filter.isActive = true;
 
     const payments = await Payment.find(filter)
       .populate('user', 'name mobile userId')

@@ -513,6 +513,15 @@ exports.getAllSubscriptions = async (req, res) => {
     if (status) filter.status = status;
     if (planType) filter.planType = planType;
 
+    // Get active users only
+    const activeUserIds = await User.find({ 
+      role: 'customer', 
+      isActive: true,
+      deletedAt: { $exists: false }
+    }).distinct('_id');
+    
+    filter.user = { $in: activeUserIds };
+
     const subscriptions = await Subscription.find(filter)
       .populate('user', 'name mobile userId')
       .sort({ createdAt: -1 });

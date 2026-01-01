@@ -139,8 +139,16 @@ exports.getTodaysDeliveries = async (req, res) => {
     const today = moment().startOf('day').toDate();
     const tomorrow = moment().add(1, 'day').startOf('day').toDate();
 
+    // Get active users only
+    const activeUserIds = await User.find({ 
+      role: 'customer', 
+      isActive: true,
+      deletedAt: { $exists: false }
+    }).distinct('_id');
+
     const deliveries = await Delivery.find({
-      deliveryDate: { $gte: today, $lt: tomorrow }
+      deliveryDate: { $gte: today, $lt: tomorrow },
+      user: { $in: activeUserIds }
     })
       .populate('user', 'name mobile address')
       .populate('deliveryBoy', 'name mobile')
@@ -273,9 +281,17 @@ exports.getKitchenSummary = async (req, res) => {
     const startOfDay = targetDate.startOf('day').toDate();
     const endOfDay = targetDate.endOf('day').toDate();
 
+    // Get active users only
+    const activeUserIds = await User.find({ 
+      role: 'customer', 
+      isActive: true,
+      deletedAt: { $exists: false }
+    }).distinct('_id');
+
     const deliveries = await Delivery.find({
       deliveryDate: { $gte: startOfDay, $lte: endOfDay },
-      status: { $ne: 'disabled' }
+      status: { $ne: 'disabled' },
+      user: { $in: activeUserIds }
     }).populate('user', 'name mobile');
 
     // Calculate summary

@@ -12,32 +12,58 @@ const moment = require('moment');
 // @access  Private (Owner only)
 exports.getDashboardStats = async (req, res) => {
   try {
-    // Get counts
-    const totalCustomers = await User.countDocuments({ role: 'customer' });
-    const activeCustomers = await User.countDocuments({ role: 'customer', isActive: true });
-    const activeSubscriptions = await Subscription.countDocuments({ status: 'active' });
+    // Get counts - ONLY include non-deleted users
+    const totalCustomers = await User.countDocuments({ 
+      role: 'customer', 
+      isActive: true,
+      deletedAt: { $exists: false }
+    });
+    const activeCustomers = await User.countDocuments({ 
+      role: 'customer', 
+      isActive: true,
+      deletedAt: { $exists: false }
+    });
+    const activeSubscriptions = await Subscription.countDocuments({ 
+      status: 'active',
+      isActive: true
+    });
     const pendingRequests = await AccessRequest.countDocuments({ status: 'pending' });
 
-    // Today's deliveries
+    // Today's deliveries - exclude deleted users
     const today = moment().startOf('day').toDate();
     const tomorrow = moment().add(1, 'day').startOf('day').toDate();
+    
+    // Get active users first
+    const activeUserIds = await User.find({ 
+      role: 'customer', 
+      isActive: true,
+      deletedAt: { $exists: false }
+    }).distinct('_id');
+    
     const todayDeliveries = await Delivery.countDocuments({
-      deliveryDate: { $gte: today, $lt: tomorrow }
+      deliveryDate: { $gte: today, $lt: tomorrow },
+      userId: { $in: activeUserIds }
     });
 
-    // Pending payments
+    // Pending payments - exclude deleted users
     const pendingPayments = await Payment.countDocuments({
-      paymentStatus: { $in: ['pending', 'partial'] }
+      paymentStatus: { $in: ['pending', 'partial'] },
+      userId: { $in: activeUserIds },
+      isActive: true
     });
 
     const overduePayments = await Payment.countDocuments({
-      paymentStatus: 'overdue'
+      paymentStatus: 'overdue',
+      userId: { $in: activeUserIds },
+      isActive: true
     });
 
-    // Expiring subscriptions (next 7 days)
+    // Expiring subscriptions (next 7 days) - exclude deleted users
     const sevenDaysFromNow = moment().add(7, 'days').endOf('day').toDate();
     const expiringSubscriptions = await Subscription.countDocuments({
       status: 'active',
+      isActive: true,
+      userId: { $in: activeUserIds },
       endDate: { $gte: today, $lte: sevenDaysFromNow }
     });
 
@@ -49,7 +75,9 @@ exports.getDashboardStats = async (req, res) => {
       {
         $match: {
           paymentDate: { $gte: monthStart, $lte: monthEnd },
-          paymentStatus: 'paid'
+          paymentStatus: 'paid',
+          userId: { $in: activeUserIds },
+          isActive: true
         }
       },
       {
@@ -67,7 +95,9 @@ exports.getDashboardStats = async (req, res) => {
       {
         $match: {
           paymentDate: { $gte: today, $lt: tomorrow },
-          paymentStatus: 'paid'
+          paymentStatus: 'paid',
+          userId: { $in: activeUserIds },
+          isActive: true
         }
       },
       {
@@ -84,7 +114,9 @@ exports.getDashboardStats = async (req, res) => {
     const pendingAmount = await Payment.aggregate([
       {
         $match: {
-          paymentStatus: { $in: ['pending', 'partial'] }
+          paymentStatus: { $in: ['pending', 'partial'] },
+          userId: { $in: activeUserIds },
+          isActive: true
         }
       },
       {
