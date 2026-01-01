@@ -163,7 +163,7 @@ const generateTempPassword = () => {
 // @access  Private (Owner only)
 exports.createCustomer = async (req, res) => {
   try {
-    const { name, mobile, address, landmark, plan, mealType, duration } = req.body;
+    const { name, mobile, address, landmark } = req.body;
 
     // Validate required fields
     if (!name || !mobile) {
@@ -211,32 +211,6 @@ exports.createCustomer = async (req, res) => {
     // Create user in database
     const user = await User.create(userData);
 
-    // Create a pending subscription for the new customer
-    let subscription = null;
-    if (plan && mealType && duration) {
-      try {
-        const startDate = moment();
-        const durationDays = parseInt(duration) || 30;
-        const endDate = moment(startDate).add(durationDays, 'days');
-
-        subscription = await Subscription.create({
-          user: user._id,
-          planType: plan.toLowerCase(),
-          mealType: mealType.toLowerCase(),
-          startDate: startDate.toDate(),
-          endDate: endDate.toDate(),
-          amount: 0, // Will be set when owner activates
-          status: 'pending',
-          createdBy: req.user._id
-        });
-
-        console.log('✅ Pending subscription created for new customer:', subscription._id);
-      } catch (subError) {
-        console.error('⚠️ Failed to create subscription (non-critical):', subError);
-        // Continue even if subscription creation fails
-      }
-    }
-
     // Send SMS with credentials
     try {
       const smsMessage = `Welcome to The Home Kitchen! Your User ID is ${userId} and Temporary Password is ${tempPassword}. Please login and change your password.`;
@@ -273,7 +247,6 @@ exports.createCustomer = async (req, res) => {
         metadata: {
           userId: user.userId,
           mobile: user.mobile,
-          plan: plan || 'none',
           createdBy: req.user._id
         }
       });
@@ -301,30 +274,15 @@ exports.createCustomer = async (req, res) => {
       createdAt: user.createdAt
     });
 
-    // If subscription was created, emit that too
-    if (subscription) {
-      socketService.emitSubscriptionCreated({
-        _id: subscription._id,
-        user: user._id,
-        planType: subscription.planType,
-        mealType: subscription.mealType,
-        status: subscription.status,
-        startDate: subscription.startDate,
-        endDate: subscription.endDate
-      });
-    }
-
     // Return success response
     res.status(201).json({
       success: true,
-      message: 'Customer created successfully',
+      message: 'Customer created successfully. User can now login and select subscription plan.',
       data: {
         userId,
         tempPassword, // Return for owner to share with customer
         name,
-        mobile,
-        subscriptionId: subscription?._id,
-        subscriptionStatus: subscription?.status || 'none'
+        mobile
       }
     });
 
