@@ -21,7 +21,7 @@ const paymentSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['pending', 'verified', 'rejected'],
+    enum: ['pending', 'paid', 'verified', 'rejected'],
     default: 'pending'
   },
   referenceNote: {
@@ -31,6 +31,9 @@ const paymentSchema = new mongoose.Schema({
   paymentDate: {
     type: Date,
     default: Date.now
+  },
+  receivedAt: {
+    type: Date
   },
   verifiedBy: {
     type: mongoose.Schema.Types.ObjectId,

@@ -3,8 +3,10 @@ const Subscription = require('../models/Subscription');
 const User = require('../models/User');
 const Payment = require('../models/Payment');
 const MealOrder = require('../models/MealOrder');
+const DefaultMeal = require('../models/DefaultMeal');
 const Delivery = require('../models/Delivery');
 const smsService = require('./smsService');
+const socketService = require('./socketService');
 const logger = require('../utils/logger');
 const moment = require('moment');
 
@@ -460,6 +462,108 @@ class CronService {
     logger.info(`Scheduled: ${jobName} - Daily at 5:00 AM`);
   }
 
+  // ========== DAILY MIDNIGHT TASKS ==========
+  // Run at midnight every day to:
+  // 1. Check and expire subscriptions
+  // 2. Lock expired subscriptions
+  // 3. Update remaining days
+  // 4. Reset daily counters
+  dailyMidnightTasks() {
+    const job = cron.schedule('0 0 * * *', async () => {
+      const jobName = 'Daily Midnight Tasks';
+      logger.info(`Running: ${jobName}`);
+      
+      try {
+        const today = moment().startOf('day').toDate();
+        let tasksCompleted = 0;
+
+        // Task 1: Expire subscriptions that have reached their end date
+        const subscriptionsToExpire = await Subscription.find({
+          status: 'active',
+          endDate: { $lt: today }
+        }).populate('user');
+
+        for (const subscription of subscriptionsToExpire) {
+          try {
+            subscription.status = 'expired';
+            await subscription.save();
+            
+            // Emit real-time event
+            socketService.emitSubscriptionUpdated({
+              _id: subscription._id,
+              user: subscription.user._id,
+              status: 'expired',
+              planType: subscription.planType
+            });
+
+            logger.info(`Expired subscription for user: ${subscription.user.name}`);
+            tasksCompleted++;
+          } catch (err) {
+            logger.error(`Failed to expire subscription ${subscription._id}`, err);
+          }
+        }
+
+        // Task 2: Update remaining days for all active subscriptions
+        const activeSubscriptions = await Subscription.find({
+          status: 'active'
+        });
+
+        for (const subscription of activeSubscriptions) {
+          try {
+            const daysLeft = moment(subscription.endDate).diff(moment(), 'days');
+            subscription.remainingDays = Math.max(0, daysLeft);
+            await subscription.save();
+          } catch (err) {
+            logger.error(`Failed to update remaining days for ${subscription._id}`, err);
+          }
+        }
+
+        // Task 3: Check for trial subscriptions that have exhausted their days
+        const trialSubscriptions = await Subscription.find({
+          status: 'active',
+          planType: 'trial',
+          daysUsed: { $gte: 3 }
+        }).populate('user');
+
+        for (const trialSub of trialSubscriptions) {
+          try {
+            trialSub.status = 'expired';
+            await trialSub.save();
+            
+            // Emit real-time event
+            socketService.emitSubscriptionUpdated({
+              _id: trialSub._id,
+              user: trialSub.user._id,
+              status: 'expired',
+              planType: 'trial',
+              message: '3-day trial period ended'
+            });
+
+            // Send SMS notification
+            await smsService.sendTrialExpired(
+              trialSub.user.mobile,
+              trialSub.user.name,
+              trialSub.user._id
+            );
+
+            logger.info(`Trial expired for user: ${trialSub.user.name}`);
+            tasksCompleted++;
+          } catch (err) {
+            logger.error(`Failed to expire trial for ${trialSub._id}`, err);
+          }
+        }
+
+        logger.success(`${jobName} completed: ${tasksCompleted} subscriptions processed`);
+      } catch (error) {
+        logger.error(`${jobName} failed`, error);
+      }
+    });
+
+    this.jobs.push({ name: 'dailyMidnightTasks', job });
+    logger.info(`Scheduled: Daily Midnight Tasks - Every day at 00:00`);
+    return job;
+  }
+
   // Start all cron jobs
   startAllJobs() {
     logger.info('Starting all cron jobs...');
@@ -471,6 +575,7 @@ class CronService {
     this.autoAssignDefaultMeals();
     this.autoMarkDelivered();
     this.autoCreateDeliveries();
+    this.dailyMidnightTasks(); // NEW: Daily midnight subscription management
     
     logger.success(`All ${this.jobs.length} cron jobs started successfully`);
   }

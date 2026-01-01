@@ -1,6 +1,8 @@
 const Subscription = require('../models/Subscription');
 const User = require('../models/User');
+const AppNotification = require('../models/AppNotification');
 const moment = require('moment');
+const socketService = require('../services/socketService');
 
 // @desc    Get available subscription plans
 // @route   GET /api/subscriptions/plans
@@ -95,13 +97,33 @@ exports.selectPlan = async (req, res) => {
       });
     }
 
+    // ========== CRITICAL: ONE ACTIVE SUBSCRIPTION RULE ==========
+    // Check if user already has an active or pending subscription
+    const existingActiveSubscription = await Subscription.findOne({
+      user: req.user._id,
+      status: { $in: ['active', 'pending'] }
+    });
+
+    if (existingActiveSubscription) {
+      return res.status(400).json({
+        success: false,
+        message: 'You already have an active subscription. Please wait for it to expire or cancel it first.',
+        existingSubscription: {
+          planType: existingActiveSubscription.planType,
+          status: existingActiveSubscription.status,
+          endDate: existingActiveSubscription.endDate
+        }
+      });
+    }
+
+    // ========== TRIAL PERIOD VALIDATION ==========
     // Check if user is trying to use trial when already used
     if (type === 'trial') {
       const user = await User.findById(req.user._id);
       if (user.hasUsedTrial) {
         return res.status(400).json({
           success: false,
-          message: 'Trial period already used. Please select a regular plan.'
+          message: 'Trial period already used (maximum 3 days). Please select a regular plan.'
         });
       }
     }
@@ -112,7 +134,7 @@ exports.selectPlan = async (req, res) => {
 
     switch (type) {
       case 'trial':
-        end = moment(startDate).add(2, 'days');
+        end = moment(startDate).add(2, 'days'); // 3 days total (day 0, 1, 2)
         totalDays = 3;
         amount = 0; // Free trial
         planCategory = 'trial';
@@ -137,12 +159,9 @@ exports.selectPlan = async (req, res) => {
         break;
     }
 
-    // Expire any existing active subscriptions
-    await Subscription.updateMany(
-      { user: req.user._id, status: { $in: ['active', 'pending'] } },
-      { status: 'expired' }
-    );
-
+    // NO LONGER EXPIRE EXISTING SUBSCRIPTIONS AUTOMATICALLY
+    // User must have NO active/pending subscription (checked above)
+    
     // For trial plans, mark user as having used trial
     if (type === 'trial') {
       await User.findByIdAndUpdate(req.user._id, { hasUsedTrial: true });
@@ -171,6 +190,47 @@ exports.selectPlan = async (req, res) => {
     const message = type === 'trial'
       ? 'Trial subscription created. Please complete payment to activate (₹0 for trial, but food cost applies).'
       : 'Subscription created. Please complete payment to activate.';
+
+    // Create AppNotification for owner
+    try {
+      const user = await User.findById(req.user._id);
+      await AppNotification.createNotification({
+        type: 'subscription_requested',
+        title: 'New Subscription Request',
+        message: `${user.name} requested ${type.toUpperCase()} plan (${dietaryPreference})`,
+        relatedUser: req.user._id,
+        relatedModel: 'Subscription',
+        relatedId: subscription._id,
+        priority: 'high',
+        metadata: {
+          planType: type,
+          dietaryPreference: dietaryPreference,
+          amount: subscription.amount,
+          startDate: subscription.startDate
+        }
+      });
+
+      // Emit notification event
+      socketService.emitNotification({
+        type: 'subscription_requested',
+        title: 'New Subscription Request',
+        message: `${user.name} requested ${type} plan`,
+        priority: 'high'
+      });
+    } catch (notifError) {
+      console.error('Failed to create subscription notification:', notifError);
+    }
+
+    // Emit real-time subscription created event
+    socketService.emitSubscriptionCreated({
+      _id: subscription._id,
+      user: subscription.user,
+      planType: subscription.planType,
+      status: subscription.status,
+      startDate: subscription.startDate,
+      endDate: subscription.endDate,
+      amount: subscription.amount
+    });
 
     res.status(201).json({
       success: true,
@@ -232,6 +292,39 @@ exports.updateSubscriptionStatus = async (req, res) => {
       newStatus: subscription.status
     });
 
+    // Create AppNotification when subscription is activated
+    if (status === 'active') {
+      try {
+        await AppNotification.createNotification({
+          type: 'subscription_activated',
+          title: 'Subscription Activated',
+          message: `${subscription.user.name}'s ${subscription.planType} subscription is now active`,
+          relatedUser: subscription.user._id,
+          relatedModel: 'Subscription',
+          relatedId: subscription._id,
+          priority: 'medium',
+          metadata: {
+            planType: subscription.planType,
+            startDate: subscription.startDate,
+            endDate: subscription.endDate
+          }
+        });
+      } catch (notifError) {
+        console.error('Failed to create activation notification:', notifError);
+      }
+    }
+
+    // Emit real-time subscription update event
+    socketService.emitSubscriptionUpdated({
+      _id: subscription._id,
+      user: subscription.user._id,
+      planType: subscription.planType,
+      status: subscription.status,
+      startDate: subscription.startDate,
+      endDate: subscription.endDate,
+      remainingDays: subscription.remainingDays
+    });
+
     res.status(200).json({
       success: true,
       message: `Subscription ${status}`,
@@ -271,6 +364,28 @@ exports.createSubscription = async (req, res) => {
       return res.status(404).json({
         success: false,
         message: 'User not found'
+      });
+    }
+
+    // BUSINESS RULE: One Active Subscription Only
+    const existingActiveSubscription = await Subscription.findOne({
+      user: userId,
+      status: 'active'
+    });
+
+    if (existingActiveSubscription) {
+      return res.status(400).json({
+        success: false,
+        message: 'User already has an active subscription. Only one active subscription is allowed.',
+        data: {
+          existingSubscription: {
+            id: existingActiveSubscription._id,
+            planType: existingActiveSubscription.planType,
+            startDate: existingActiveSubscription.startDate,
+            endDate: existingActiveSubscription.endDate,
+            status: existingActiveSubscription.status
+          }
+        }
       });
     }
 

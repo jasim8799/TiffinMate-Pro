@@ -3,8 +3,11 @@ const DefaultMeal = require('../models/DefaultMeal');
 const Delivery = require('../models/Delivery');
 const WeeklyMenu = require('../models/WeeklyMenu');
 const Subscription = require('../models/Subscription');
+const AppNotification = require('../models/AppNotification');
+const socketService = require('../services/socketService');
 const moment = require('moment');
 const { createNotification } = require('./notificationController');
+const User = require('../models/User');
 
 // @desc    Select meal for specific date
 // @route   POST /api/meals/select
@@ -20,11 +23,48 @@ exports.selectMeal = async (req, res) => {
       });
     }
 
-    // Get user's subscription to check dietary preference
+    // ========== SUBSCRIPTION & TRIAL VALIDATION ==========
+    // Get user's active subscription
     const subscription = await Subscription.findOne({
       user: req.user._id,
       status: 'active'
     }).sort({ createdAt: -1 });
+
+    if (!subscription) {
+      return res.status(403).json({
+        success: false,
+        message: 'No active subscription found. Please select a subscription plan first.'
+      });
+    }
+
+    // Check if subscription is expired
+    const currentTime = moment();
+    if (moment(subscription.endDate).isBefore(currentTime)) {
+      return res.status(403).json({
+        success: false,
+        message: 'Your subscription has expired. Please renew to continue ordering meals.'
+      });
+    }
+
+    // ========== TRIAL PERIOD ENFORCEMENT ==========
+    if (subscription.planType === 'trial') {
+      // Check if trial days are exhausted
+      const trialDaysUsed = subscription.daysUsed || 0;
+      const trialDaysLimit = 3;
+      
+      if (trialDaysUsed >= trialDaysLimit) {
+        return res.status(403).json({
+          success: false,
+          message: 'Your 3-day trial period has ended. Please purchase a subscription to continue ordering meals.',
+          trialExpired: true
+        });
+      }
+
+      // Warn user if on last trial day
+      if (trialDaysUsed === trialDaysLimit - 1) {
+        console.log(`⚠️ User ${req.user._id} is on their last trial day`);
+      }
+    }
 
     const dietaryPreference = subscription?.mealPreferences?.dietaryPreference || 'both';
 
@@ -91,11 +131,11 @@ exports.selectMeal = async (req, res) => {
     const deliveryMoment = moment(deliveryDate).startOf('day');
     const lunchCutoff = deliveryMoment.clone().subtract(1, 'day').hour(23).minute(0).second(0);
     const dinnerCutoff = deliveryMoment.clone().hour(11).minute(0).second(0);
-    const now = moment();
+    const currentMoment = moment();
 
     // Check cutoff times
-    const canSelectLunch = now.isBefore(lunchCutoff);
-    const canSelectDinner = now.isBefore(dinnerCutoff);
+    const canSelectLunch = currentMoment.isBefore(lunchCutoff);
+    const canSelectDinner = currentMoment.isBefore(dinnerCutoff);
 
     if (lunch && !canSelectLunch) {
       return res.status(400).json({
@@ -196,6 +236,50 @@ exports.selectMeal = async (req, res) => {
         meals: mealNames
       }
     );
+
+    // Create AppNotification for owner
+    try {
+      const mealDesc = [];
+      if (lunch) mealDesc.push(`L: ${lunch.name}`);
+      if (dinner) mealDesc.push(`D: ${dinner.name}`);
+      
+      await AppNotification.createNotification({
+        type: 'meal_selected',
+        title: 'New Meal Order',
+        message: `${user?.name} selected meals for ${deliveryMoment.format('MMM DD')} - ${mealDesc.join(', ')}`,
+        relatedUser: req.user._id,
+        relatedModel: 'Meal',
+        relatedId: mealOrder._id,
+        priority: 'medium',
+        metadata: {
+          deliveryDate: deliveryMoment.format('YYYY-MM-DD'),
+          hasLunch: !!lunch,
+          hasDinner: !!dinner,
+          lunchName: lunch?.name,
+          dinnerName: dinner?.name
+        }
+      });
+
+      // Emit notification event
+      socketService.emitNotification({
+        type: 'meal_selected',
+        title: 'New Meal Order',
+        message: `${user?.name} ordered for ${deliveryMoment.format('MMM DD')}`,
+        priority: 'medium'
+      });
+    } catch (notifError) {
+      console.error('Failed to create meal notification:', notifError);
+    }
+
+    // Emit real-time meal selection event to owner
+    socketService.emitMealSelected({
+      user: req.user._id,
+      deliveryDate: deliveryMoment.toDate(),
+      lunch: lunch,
+      dinner: dinner,
+      customerName: user?.name,
+      customerId: user?.userId
+    });
 
     res.status(200).json({
       success: true,
@@ -494,6 +578,84 @@ exports.getWeeklyMenu = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Error fetching weekly menu',
+      error: error.message
+    });
+  }
+};
+
+// @desc    Get aggregated meal orders for owner (Kitchen view)
+// @route   GET /api/meals/owner/aggregated
+// @access  Private (Owner only)
+exports.getAggregatedMealOrders = async (req, res) => {
+  try {
+    const { date } = req.query;
+    const deliveryDate = date ? moment(date).startOf('day').toDate() : moment().startOf('day').toDate();
+
+    // Get all meal orders for the specified date
+    const mealOrders = await MealOrder.find({
+      deliveryDate: deliveryDate,
+      status: { $in: ['confirmed', 'preparing', 'ready'] }
+    })
+    .populate('user', 'name mobile userId address')
+    .sort({ mealType: 1, createdAt: 1 });
+
+    // Aggregate meal counts
+    const lunchCounts = {};
+    const dinnerCounts = {};
+    const customerDetails = [];
+
+    mealOrders.forEach(order => {
+      const mealName = order.selectedMeal?.name || 'Not Selected';
+      const mealType = order.mealType;
+      
+      // Add to customer details
+      customerDetails.push({
+        customerId: order.user.userId,
+        customerName: order.user.name,
+        mobile: order.user.mobile,
+        address: order.user.address,
+        mealType: mealType,
+        meal: mealName,
+        isDefault: order.selectedMeal?.isDefault || false,
+        orderId: order._id
+      });
+
+      // Aggregate counts
+      if (mealType === 'lunch') {
+        lunchCounts[mealName] = (lunchCounts[mealName] || 0) + 1;
+      } else if (mealType === 'dinner') {
+        dinnerCounts[mealName] = (dinnerCounts[mealName] || 0) + 1;
+      }
+    });
+
+    // Convert to arrays for easier display
+    const lunchSummary = Object.entries(lunchCounts).map(([meal, count]) => ({
+      meal,
+      count
+    })).sort((a, b) => b.count - a.count);
+
+    const dinnerSummary = Object.entries(dinnerCounts).map(([meal, count]) => ({
+      meal,
+      count
+    })).sort((a, b) => b.count - a.count);
+
+    res.status(200).json({
+      success: true,
+      data: {
+        date: deliveryDate,
+        totalOrders: mealOrders.length,
+        lunchSummary,
+        dinnerSummary,
+        totalLunch: Object.values(lunchCounts).reduce((a, b) => a + b, 0),
+        totalDinner: Object.values(dinnerCounts).reduce((a, b) => a + b, 0),
+        customerDetails
+      }
+    });
+  } catch (error) {
+    console.error('Get aggregated meal orders error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching aggregated meal orders',
       error: error.message
     });
   }

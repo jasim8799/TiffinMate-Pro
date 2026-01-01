@@ -6,7 +6,8 @@ const {
   getDefaultMeals,
   setDefaultMeal,
   getAllMealOrders,
-  getWeeklyMenu
+  getWeeklyMenu,
+  getAggregatedMealOrders
 } = require('../controllers/mealController');
 const { protect, authorize } = require('../middleware/auth');
 
@@ -16,5 +17,6 @@ router.get('/weekly-menu', protect, getWeeklyMenu);
 router.get('/defaults', protect, getDefaultMeals);
 router.post('/defaults', protect, authorize('owner'), setDefaultMeal);
 router.get('/orders', protect, authorize('owner'), getAllMealOrders);
+router.get('/owner/aggregated', protect, authorize('owner'), getAggregatedMealOrders);
 
 module.exports = router;

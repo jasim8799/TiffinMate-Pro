@@ -5,8 +5,10 @@ const helmet = require('helmet');
 const mongoSanitize = require('express-mongo-sanitize');
 const compression = require('compression');
 const morgan = require('morgan');
+const http = require('http');
 const connectDB = require('./config/database');
 const cronJobs = require('./services/cronService');
+const socketService = require('./services/socketService');
 
 // Load environment variables
 dotenv.config();
@@ -63,6 +65,7 @@ const accessRequestRoutes = require('./routes/accessRequestRoutes');
 const calendarRoutes = require('./routes/calendarRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
 const leadRoutes = require('./routes/leadRoutes');
+const appNotificationRoutes = require('./routes/appNotificationRoutes');
 
 // API Routes
 app.use('/api/auth', authRoutes);
@@ -76,6 +79,7 @@ app.use('/api/access-requests', accessRequestRoutes);
 app.use('/api/calendar', calendarRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/leads', leadRoutes);
+app.use('/api/app-notifications', appNotificationRoutes);
 
 // Health check endpoint
 app.get('/health', (req, res) => {
@@ -124,11 +128,17 @@ if (process.env.ENABLE_CRON !== 'false') {
   cronJobs.startAllJobs();
 }
 
-// Start server
+// Start server with Socket.IO support
 const PORT = process.env.PORT || 5000;
-const server = app.listen(PORT, '0.0.0.0', () => {
+const server = http.createServer(app);
+
+// Initialize Socket.IO
+socketService.initialize(server);
+
+server.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 The Home Kitchen Server running on port ${PORT}`);
   console.log(`📱 Environment: ${process.env.NODE_ENV}`);
+  console.log(`🔌 Socket.IO ready for real-time updates`);
 });
 
 // Graceful shutdown for Render
@@ -154,4 +164,5 @@ process.on('unhandledRejection', (err) => {
   server.close(() => process.exit(1));
 });
 
-module.exports = app;
+// Export both app and socketService
+module.exports = { app, socketService };

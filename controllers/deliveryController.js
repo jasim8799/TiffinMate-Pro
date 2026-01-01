@@ -3,6 +3,7 @@ const Subscription = require('../models/Subscription');
 const User = require('../models/User');
 const MealOrder = require('../models/MealOrder');
 const smsService = require('../services/smsService');
+const socketService = require('../services/socketService');
 const moment = require('moment');
 
 // @desc    Create delivery
@@ -69,6 +70,13 @@ exports.updateDeliveryStatus = async (req, res) => {
     switch (status) {
       case 'preparing':
         await smsService.sendDeliveryPreparing(user.mobile, user.name, user._id);
+        socketService.emitCookingStarted({
+          _id: delivery._id,
+          user: user._id,
+          status: delivery.status,
+          deliveryDate: delivery.deliveryDate,
+          mealType: delivery.mealType
+        });
         break;
       case 'on-the-way':
         await smsService.sendDeliveryOnWay(user.mobile, user.name, user._id);
@@ -76,13 +84,36 @@ exports.updateDeliveryStatus = async (req, res) => {
           delivery.deliveryBoy = req.body.deliveryBoyId;
           await delivery.save();
         }
+        socketService.emitOutForDelivery({
+          _id: delivery._id,
+          user: user._id,
+          status: delivery.status,
+          deliveryDate: delivery.deliveryDate,
+          mealType: delivery.mealType
+        });
         break;
       case 'delivered':
         await smsService.sendDeliveryDelivered(user.mobile, user.name, user._id);
         // Mark day as used in subscription
         const subscription = delivery.subscription;
         await subscription.markDayUsed();
+        socketService.emitDelivered({
+          _id: delivery._id,
+          user: user._id,
+          status: delivery.status,
+          deliveryDate: delivery.deliveryDate,
+          mealType: delivery.mealType
+        });
         break;
+      default:
+        // For any other status, send general update
+        socketService.emitDeliveryStatusUpdated({
+          _id: delivery._id,
+          user: user._id,
+          status: delivery.status,
+          deliveryDate: delivery.deliveryDate,
+          mealType: delivery.mealType
+        });
     }
 
     res.status(200).json({

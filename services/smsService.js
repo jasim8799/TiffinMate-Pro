@@ -242,6 +242,11 @@ class Fast2SMSService {
     return await this.sendSMS(mobile, message, 'subscription-expiry', userId);
   }
 
+  async sendTrialExpired(mobile, userName, userId) {
+    const message = `Hi ${userName}, your 3-day trial period has ended. Thank you for trying The Home Kitchen! Please purchase a subscription to continue ordering delicious meals.`;
+    return await this.sendSMS(mobile, message, 'trial-expired', userId);
+  }
+
   async sendServiceDisabled(mobile, userName, userId) {
     const message = `Hi ${userName}, your The Home Kitchen service has been temporarily disabled due to subscription expiry. Please renew to resume service.`;
     return await this.sendSMS(mobile, message, 'subscription-disabled', userId);

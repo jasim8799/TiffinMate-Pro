@@ -1,8 +1,10 @@
 const User = require('../models/User');
 const Subscription = require('../models/Subscription');
+const AppNotification = require('../models/AppNotification');
 const moment = require('moment');
 const smsService = require('../services/smsService');
 const { createNotification } = require('./notificationController');
+const socketService = require('../services/socketService');
 
 // @desc    Get my profile (logged-in user)
 // @route   GET /api/users/me
@@ -258,6 +260,60 @@ exports.createCustomer = async (req, res) => {
       'User'
     );
 
+    // Create AppNotification for owner dashboard
+    try {
+      await AppNotification.createNotification({
+        type: 'user_created',
+        title: 'New Customer Created',
+        message: `${name} (${userId}) - ${mobile}`,
+        relatedUser: user._id,
+        relatedModel: 'User',
+        relatedId: user._id,
+        priority: 'medium',
+        metadata: {
+          userId: user.userId,
+          mobile: user.mobile,
+          plan: plan || 'none',
+          createdBy: req.user._id
+        }
+      });
+
+      // Emit notification event to owner
+      socketService.emitNotification({
+        type: 'user_created',
+        title: 'New Customer Created',
+        message: `${name} (${userId}) has been added`,
+        priority: 'medium'
+      });
+    } catch (notifError) {
+      console.error('Failed to create app notification:', notifError);
+      // Non-critical, continue
+    }
+
+    // Emit real-time event for owner
+    socketService.emitUserCreated({
+      _id: user._id,
+      userId: user.userId,
+      name: user.name,
+      mobile: user.mobile,
+      role: user.role,
+      isActive: user.isActive,
+      createdAt: user.createdAt
+    });
+
+    // If subscription was created, emit that too
+    if (subscription) {
+      socketService.emitSubscriptionCreated({
+        _id: subscription._id,
+        user: user._id,
+        planType: subscription.planType,
+        mealType: subscription.mealType,
+        status: subscription.status,
+        startDate: subscription.startDate,
+        endDate: subscription.endDate
+      });
+    }
+
     // Return success response
     res.status(201).json({
       success: true,
@@ -382,6 +438,17 @@ exports.updateUser = async (req, res) => {
 
     await user.save();
 
+    // Emit real-time update event
+    socketService.emitUserUpdated({
+      _id: user._id,
+      userId: user.userId,
+      name: user.name,
+      mobile: user.mobile,
+      role: user.role,
+      isActive: user.isActive,
+      address: user.address
+    });
+
     res.status(200).json({
       success: true,
       message: 'User updated successfully',
@@ -413,6 +480,16 @@ exports.toggleUserActive = async (req, res) => {
 
     user.isActive = !user.isActive;
     await user.save();
+
+    // Emit real-time update event
+    socketService.emitUserUpdated({
+      _id: user._id,
+      userId: user.userId,
+      name: user.name,
+      mobile: user.mobile,
+      role: user.role,
+      isActive: user.isActive
+    });
 
     res.status(200).json({
       success: true,
@@ -447,6 +524,9 @@ exports.deleteUser = async (req, res) => {
     user.isActive = false;
     user.deletedAt = new Date();
     await user.save();
+
+    // Emit real-time delete event
+    socketService.emitUserDeleted(user._id.toString());
 
     res.status(200).json({
       success: true,

@@ -8,6 +8,7 @@ const {
   getMyPayments,
   getPendingPayments,
   verifyPayment,
+  receivePayment,
   getAllPayments,
   getPayment
 } = require('../controllers/paymentController');
@@ -25,6 +26,7 @@ router.get('/my', protect, authorize('customer'), getMyPayments);
 // ====================================
 router.get('/pending', protect, authorize('owner'), getPendingPayments);
 router.put('/:id/verify', protect, authorize('owner'), verifyPayment);
+router.put('/:id/receive', protect, authorize('owner'), receivePayment);
 router.get('/all', protect, authorize('owner'), getAllPayments);
 
 // ====================================
