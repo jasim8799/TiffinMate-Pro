@@ -1,4 +1,6 @@
 const Subscription = require('../models/Subscription');
+const SubscriptionPlan = require('../models/SubscriptionPlan');
+const WeeklyMenu = require('../models/WeeklyMenu');
 const User = require('../models/User');
 const AppNotification = require('../models/AppNotification');
 const moment = require('moment');
@@ -9,60 +11,157 @@ const socketService = require('../services/socketService');
 // @access  Public
 exports.getPlans = async (req, res) => {
   try {
-    // Check if user has used trial (only if authenticated)
-    let hasUsedTrial = true; // Default to true for unauthenticated requests
+    const { durationType, mealType } = req.query;
     
-    if (req.user) {
-      const user = await User.findById(req.user._id);
-      hasUsedTrial = user?.hasUsedTrial || false;
-    }
-
-    const plans = {};
+    const filter = { isActive: true };
     
-    if (!hasUsedTrial) {
-      // New users see trial option (3 days free)
-      plans.trial = { 
-        days: 3, 
-        price: 0, 
-        description: '3-Day Free Trial',
-        category: 'trial',
-        menuAccess: 'classic'
-      };
+    if (durationType) {
+      filter.durationType = durationType;
     }
     
-    // All users see Classic and Premium plans
-    plans.classic = { 
-      days: 30, 
-      price: 2999, 
-      description: 'Classic Menu - Monthly',
-      category: 'classic',
-      menuAccess: 'classic'
-    };
-    plans['premium-veg'] = { 
-      days: 30, 
-      price: 3999, 
-      description: 'Premium VEG Menu - Monthly',
-      category: 'premium',
-      menuAccess: 'premium-veg'
-    };
-    plans['premium-non-veg'] = { 
-      days: 30, 
-      price: 3999, 
-      description: 'Premium NON-VEG Menu - Monthly',
-      category: 'premium',
-      menuAccess: 'premium-non-veg'
-    };
-
+    const plans = await SubscriptionPlan.find(filter).sort({ sortOrder: 1 });
+    
+    // If mealType filter is provided, filter plans
+    let filteredPlans = plans;
+    if (mealType) {
+      filteredPlans = plans.filter(plan => {
+        if (mealType === 'lunch') return plan.mealTypes.lunch;
+        if (mealType === 'dinner') return plan.mealTypes.dinner;
+        if (mealType === 'both') return plan.mealTypes.lunch && plan.mealTypes.dinner;
+        return true;
+      });
+    }
+    
     res.status(200).json({
       success: true,
-      data: plans,
-      hasUsedTrial
+      count: filteredPlans.length,
+      data: filteredPlans
     });
   } catch (error) {
     console.error('Get plans error:', error);
     res.status(500).json({
       success: false,
-      message: 'Error fetching plans',
+      message: 'Error fetching subscription plans',
+      error: error.message
+    });
+  }
+};
+
+// @desc    Get duration types (daily/weekly/monthly)
+// @route   GET /api/subscriptions/duration-types
+// @access  Public
+exports.getDurationTypes = async (req, res) => {
+  try {
+    const durationTypes = await SubscriptionPlan.aggregate([
+      { $match: { isActive: true } },
+      { 
+        $group: { 
+          _id: '$durationType',
+          minPrice: { $min: '$totalPrice' },
+          maxPrice: { $max: '$totalPrice' },
+          durationDays: { $first: '$durationDays' }
+        } 
+      },
+      { $sort: { durationDays: 1 } }
+    ]);
+    
+    const types = durationTypes.map(dt => ({
+      type: dt._id,
+      durationDays: dt.durationDays,
+      priceRange: {
+        min: dt.minPrice,
+        max: dt.maxPrice
+      }
+    }));
+    
+    res.status(200).json({
+      success: true,
+      data: types
+    });
+  } catch (error) {
+    console.error('Get duration types error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching duration types',
+      error: error.message
+    });
+  }
+};
+
+// @desc    Get subscription plans with their weekly menus
+// @route   GET /api/subscriptions/plans-with-menus
+// @access  Public
+exports.getPlansWithMenus = async (req, res) => {
+  try {
+    const { durationType, type } = req.query;
+    
+    const filter = { isActive: true };
+    
+    if (durationType) {
+      filter.durationType = durationType;
+    }
+    
+    if (type) {
+      filter.type = type; // VEG, NON_VEG, or MIX
+    }
+    
+    const plans = await SubscriptionPlan.find(filter).sort({ sortOrder: 1 });
+    
+    // For each plan, fetch its weekly menu
+    const plansWithMenus = await Promise.all(plans.map(async (plan) => {
+      const weeklyMenu = await WeeklyMenu.find({
+        planCategory: plan.menuCategory,
+        isActive: true
+      }).sort({ dayOfWeek: 1, mealType: 1 });
+      
+      // Organize menu by day
+      const menuByDay = {
+        sunday: { lunch: null, dinner: null },
+        monday: { lunch: null, dinner: null },
+        tuesday: { lunch: null, dinner: null },
+        wednesday: { lunch: null, dinner: null },
+        thursday: { lunch: null, dinner: null },
+        friday: { lunch: null, dinner: null },
+        saturday: { lunch: null, dinner: null }
+      };
+      
+      weeklyMenu.forEach(menu => {
+        if (menuByDay[menu.dayOfWeek]) {
+          menuByDay[menu.dayOfWeek][menu.mealType] = {
+            items: menu.items,
+            description: menu.description
+          };
+        }
+      });
+      
+      return {
+        _id: plan._id,
+        name: plan.name,
+        displayName: plan.displayName,
+        description: plan.description,
+        durationType: plan.durationType,
+        durationDays: plan.durationDays,
+        pricePerDay: plan.pricePerDay,
+        totalPrice: plan.totalPrice,
+        planCategory: plan.planCategory,
+        type: plan.type,
+        menuCategory: plan.menuCategory,
+        mealTypes: plan.mealTypes,
+        features: plan.features,
+        weeklyMenu: menuByDay
+      };
+    }));
+    
+    res.status(200).json({
+      success: true,
+      count: plansWithMenus.length,
+      data: plansWithMenus
+    });
+  } catch (error) {
+    console.error('Get plans with menus error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching subscription plans with menus',
       error: error.message
     });
   }

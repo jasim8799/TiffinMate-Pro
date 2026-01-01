@@ -2,6 +2,8 @@ const express = require('express');
 const router = express.Router();
 const {
   getPlans,
+  getDurationTypes,
+  getPlansWithMenus,
   selectPlan,
   updateSubscriptionStatus,
   createSubscription,
@@ -16,6 +18,8 @@ const { protect, authorize } = require('../middleware/auth');
 
 // Public routes
 router.get('/plans', getPlans);
+router.get('/duration-types', getDurationTypes);
+router.get('/plans-with-menus', getPlansWithMenus);
 
 // Customer routes
 router.post('/select', protect, authorize('customer'), selectPlan);
