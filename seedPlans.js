@@ -1,7 +1,9 @@
 /**
- * Seed Subscription Plans
+ * Seed REAL Subscription Plans with Weekly Menus
  * 
  * Run: node seedPlans.js
+ * 
+ * This seeds the ACTUAL business plans with real pricing and menus
  */
 
 const mongoose = require('mongoose');
@@ -15,55 +17,76 @@ const COLORS = {
   yellow: '\x1b[33m',
   blue: '\x1b[34m',
   cyan: '\x1b[36m',
+  red: '\x1b[31m',
+  bold: '\x1b[1m',
 };
 
 const log = {
   info: (msg) => console.log(`${COLORS.blue}ℹ${COLORS.reset} ${msg}`),
   success: (msg) => console.log(`${COLORS.green}✓${COLORS.reset} ${msg}`),
   warn: (msg) => console.log(`${COLORS.yellow}⚠${COLORS.reset} ${msg}`),
-  error: (msg) => console.log(`${COLORS.reset}✗ ${msg}`),
-  section: (msg) => console.log(`\n${COLORS.cyan}═══ ${msg} ═══${COLORS.reset}\n`),
+  error: (msg) => console.log(`${COLORS.red}✗${COLORS.reset} ${msg}`),
+  section: (msg) => console.log(`\n${COLORS.cyan}${COLORS.bold}═══ ${msg} ═══${COLORS.reset}\n`),
 };
 
-// Default subscription plans
+// ============================================
+// REAL BUSINESS PLANS (YOUR ACTUAL MENU)
+// ============================================
 const defaultPlans = [
-  // DAILY PLANS
+  // ============================================
+  // 1. CLASSIC MENU (₹2999/month) - Mix Veg & Non-Veg
+  // ============================================
   {
-    name: 'daily-classic-lunch',
-    displayName: 'Daily Classic - Lunch Only',
-    description: 'Single day subscription with lunch',
-    durationType: 'daily',
-    durationDays: 1,
+    name: 'classic-monthly-both',
+    displayName: 'Classic Menu (Monthly)',
+    description: '30 days Mix Veg & Non-Veg with weekly rotating menu - Best Value!',
+    durationType: 'monthly',
+    durationDays: 30,
     pricePerDay: 100,
-    totalPrice: 100,
+    totalPrice: 2999,
     planCategory: 'classic',
     type: 'MIX',
     menuCategory: 'classic',
-    mealTypes: { lunch: true, dinner: false },
+    mealTypes: { lunch: true, dinner: true },
     isActive: true,
-    features: ['Classic menu', 'Lunch delivery', 'Home delivery'],
+    features: [
+      'Both Lunch & Dinner',
+      'Mix Veg & Non-Veg',
+      'Chicken 3 days/week',
+      'Weekly rotating menu',
+      'Sunday: Chicken Biryani',
+      'Wednesday: Chicken Curry',
+      'Saturday: Chhole Puri & Sweets',
+      'Home delivery'
+    ],
     sortOrder: 1
   },
   {
-    name: 'daily-classic-dinner',
-    displayName: 'Daily Classic - Dinner Only',
-    description: 'Single day subscription with dinner',
-    durationType: 'daily',
-    durationDays: 1,
-    pricePerDay: 100,
-    totalPrice: 100,
+    name: 'classic-weekly-both',
+    displayName: 'Classic Menu (Weekly)',
+    description: '7 days Mix Veg & Non-Veg meals',
+    durationType: 'weekly',
+    durationDays: 7,
+    pricePerDay: 140,
+    totalPrice: 980,
     planCategory: 'classic',
     type: 'MIX',
     menuCategory: 'classic',
-    mealTypes: { lunch: false, dinner: true },
+    mealTypes: { lunch: true, dinner: true },
     isActive: true,
-    features: ['Classic menu', 'Dinner delivery', 'Home delivery'],
+    features: [
+      'Both Lunch & Dinner',
+      'Mix Veg & Non-Veg',
+      'Chicken 3 days',
+      'Weekly variety',
+      'Home delivery'
+    ],
     sortOrder: 2
   },
   {
-    name: 'daily-classic-both',
-    displayName: 'Daily Classic - Both Meals',
-    description: 'Single day subscription with lunch and dinner',
+    name: 'classic-daily-both',
+    displayName: 'Classic Menu (Daily)',
+    description: 'Single day Mix Veg & Non-Veg meals',
     durationType: 'daily',
     durationDays: 1,
     pricePerDay: 180,
@@ -73,65 +96,119 @@ const defaultPlans = [
     menuCategory: 'classic',
     mealTypes: { lunch: true, dinner: true },
     isActive: true,
-    features: ['Classic menu', 'Lunch & dinner delivery', 'Home delivery'],
+    features: ['Both Lunch & Dinner', 'Mix Veg & Non-Veg', 'Home delivery'],
     sortOrder: 3
   },
 
-  // WEEKLY PLANS
+  // ============================================
+  // 2. PREMIUM VEG (₹3999/month) - Pure Vegetarian
+  // ============================================
   {
-    name: 'weekly-classic-lunch',
-    displayName: 'Weekly Classic - Lunch Only',
-    description: '7 days subscription with lunch',
-    durationType: 'weekly',
-    durationDays: 7,
-    pricePerDay: 90,
-    totalPrice: 630,
-    planCategory: 'classic',
-    type: 'MIX',
-    menuCategory: 'classic',
-    mealTypes: { lunch: true, dinner: false },
+    name: 'premium-veg-monthly-both',
+    displayName: 'Premium Veg Menu (Monthly)',
+    description: '30 days Pure Vegetarian premium meals',
+    durationType: 'monthly',
+    durationDays: 30,
+    pricePerDay: 133,
+    totalPrice: 3999,
+    planCategory: 'premium',
+    type: 'VEG',
+    menuCategory: 'premium-veg',
+    mealTypes: { lunch: true, dinner: true },
     isActive: true,
-    features: ['Classic menu', 'Lunch delivery', 'Home delivery', 'Save ₹70'],
+    features: [
+      'Both Lunch & Dinner',
+      '100% Pure Vegetarian',
+      'Premium ingredients',
+      'Paneer dishes 3 days/week',
+      'Special sweets & desserts',
+      'More items per meal',
+      'Dal, Rice, Roti combo',
+      'Home delivery'
+    ],
     sortOrder: 4
   },
   {
-    name: 'weekly-classic-dinner',
-    displayName: 'Weekly Classic - Dinner Only',
-    description: '7 days subscription with dinner',
+    name: 'premium-veg-weekly-both',
+    displayName: 'Premium Veg Menu (Weekly)',
+    description: '7 days Pure Vegetarian premium meals',
     durationType: 'weekly',
     durationDays: 7,
-    pricePerDay: 90,
-    totalPrice: 630,
-    planCategory: 'classic',
-    type: 'MIX',
-    menuCategory: 'classic',
-    mealTypes: { lunch: false, dinner: true },
-    isActive: true,
-    features: ['Classic menu', 'Dinner delivery', 'Home delivery', 'Save ₹70'],
-    sortOrder: 5
-  },
-  {
-    name: 'weekly-classic-both',
-    displayName: 'Weekly Classic - Both Meals',
-    description: '7 days subscription with lunch and dinner',
-    durationType: 'weekly',
-    durationDays: 7,
-    pricePerDay: 170,
-    totalPrice: 1190,
-    planCategory: 'classic',
-    type: 'MIX',
-    menuCategory: 'classic',
+    pricePerDay: 180,
+    totalPrice: 1260,
+    planCategory: 'premium',
+    type: 'VEG',
+    menuCategory: 'premium-veg',
     mealTypes: { lunch: true, dinner: true },
     isActive: true,
-    features: ['Classic menu', 'Lunch & dinner delivery', 'Home delivery', 'Save ₹70'],
-    sortOrder: 6
+    features: [
+      'Both Lunch & Dinner',
+      '100% Pure Veg',
+      'Premium quality',
+      'Paneer dishes',
+      'Home delivery'
+    ],
+    sortOrder: 5
   },
 
-  // MONTHLY PLANS
+  // ============================================
+  // 3. PREMIUM NON-VEG (₹3999/month)
+  // ============================================
   {
-    name: 'monthly-classic-lunch',
-    displayName: 'Monthly Classic - Lunch Only',
-    description: '30 days subscription with lunch',
+    name: 'premium-non-veg-monthly-both',
+    displayName: 'Premium Non-Veg Menu (Monthly)',
+    description: '30 days Premium non-vegetarian delights',
+    durationType: 'monthly',
+    durationDays: 30,
+    pricePerDay: 133,
+    totalPrice: 3999,
+    planCategory: 'premium',
+    type: 'NON_VEG',
+    menuCategory: 'premium-non-veg',
+    mealTypes: { lunch: true, dinner: true },
+    isActive: true,
+    features: [
+      'Both Lunch & Dinner',
+      'Premium Non-Veg',
+      'Chicken/Egg 5 days/week',
+      'Biryani on weekends',
+      'Special preparations',
+      'More items per meal',
+      'Dal, Rice, Roti combo',
+      'Home delivery'
+    ],
+    sortOrder: 6
+  },
+  {
+    name: 'premium-non-veg-weekly-both',
+    displayName: 'Premium Non-Veg Menu (Weekly)',
+    description: '7 days Premium non-vegetarian meals',
+    durationType: 'weekly',
+    durationDays: 7,
+    pricePerDay: 180,
+    totalPrice: 1260,
+    planCategory: 'premium',
+    type: 'NON_VEG',
+    menuCategory: 'premium-non-veg',
+    mealTypes: { lunch: true, dinner: true },
+    isActive: true,
+    features: [
+      'Both Lunch & Dinner',
+      'Premium Non-Veg',
+      'Chicken/Egg items',
+      'Special items',
+      'Home delivery'
+    ],
+    sortOrder: 7
+  },
+
+  // ============================================
+  // LUNCH ONLY PLANS
+  // ============================================
+  {
+    name: 'classic-monthly-lunch',
+    displayName: 'Classic Lunch Only (Monthly)',
+    description: '30 days lunch meals with Mix Veg & Non-Veg',
     durationType: 'monthly',
     durationDays: 30,
     pricePerDay: 80,
@@ -141,49 +218,35 @@ const defaultPlans = [
     menuCategory: 'classic',
     mealTypes: { lunch: true, dinner: false },
     isActive: true,
-    features: ['Classic menu', 'Lunch delivery', 'Home delivery', 'Save ₹600'],
-    sortOrder: 7
-  },
-  {
-    name: 'monthly-classic-dinner',
-    displayName: 'Monthly Classic - Dinner Only',
-    description: '30 days subscription with dinner',
-    durationType: 'monthly',
-    durationDays: 30,
-    pricePerDay: 80,
-    totalPrice: 2400,
-    planCategory: 'classic',
-    type: 'MIX',
-    menuCategory: 'classic',
-    mealTypes: { lunch: false, dinner: true },
-    isActive: true,
-    features: ['Classic menu', 'Dinner delivery', 'Home delivery', 'Save ₹600'],
+    features: ['Lunch only', 'Mix Veg & Non-Veg', 'Best value', 'Home delivery'],
     sortOrder: 8
   },
   {
-    name: 'monthly-classic-both',
-    displayName: 'Monthly Classic - Both Meals',
-    description: '30 days subscription with lunch and dinner',
-    durationType: 'monthly',
-    durationDays: 30,
-    pricePerDay: 150,
-    totalPrice: 4500,
+    name: 'classic-weekly-lunch',
+    displayName: 'Classic Lunch Only (Weekly)',
+    description: '7 days lunch meals',
+    durationType: 'weekly',
+    durationDays: 7,
+    pricePerDay: 90,
+    totalPrice: 630,
     planCategory: 'classic',
     type: 'MIX',
     menuCategory: 'classic',
-    mealTypes: { lunch: true, dinner: true },
+    mealTypes: { lunch: true, dinner: false },
     isActive: true,
-    features: ['Classic menu', 'Lunch & dinner delivery', 'Home delivery', 'Save ₹900'],
+    features: ['Lunch only', 'Mix Veg & Non-Veg', 'Home delivery'],
     sortOrder: 9
   },
 
-  // TRIAL PLAN
+  // ============================================
+  // TRIAL PLAN (FREE)
+  // ============================================
   {
-    name: 'trial-both',
-    displayName: 'Trial - Both Meals',
-    description: '3 days free trial with lunch and dinner',
-    durationType: 'trial',
-    durationDays: 3,
+    name: 'trial-1day-free',
+    displayName: 'Free Trial (1 Day)',
+    description: 'Try our Classic menu free for 1 day',
+    durationType: 'daily',
+    durationDays: 1,
     pricePerDay: 0,
     totalPrice: 0,
     planCategory: 'trial',
@@ -191,7 +254,13 @@ const defaultPlans = [
     menuCategory: 'classic',
     mealTypes: { lunch: true, dinner: true },
     isActive: true,
-    features: ['Free trial', 'Classic menu', 'Lunch & dinner', 'Home delivery'],
+    features: [
+      'FREE Trial',
+      'Both meals',
+      'Classic menu',
+      'No payment required',
+      'Try before you buy'
+    ],
     sortOrder: 0
   }
 ];
