@@ -620,8 +620,12 @@ exports.getCustomers = async (req, res) => {
   try {
     const Subscription = require('../models/Subscription');
     
-    // Get ALL customers regardless of isActive status
-    const customers = await User.find({ role: 'customer' })
+    // Get only ACTIVE customers (exclude soft-deleted ones)
+    const customers = await User.find({ 
+      role: 'customer',
+      isActive: true,
+      deletedAt: { $exists: false }
+    })
       .select('-password -otp')
       .sort({ createdAt: -1 });
 
