@@ -438,6 +438,29 @@ exports.updateUser = async (req, res) => {
 
     await user.save();
 
+    // Create AppNotification for owner dashboard
+    const AppNotification = require('../models/AppNotification');
+    try {
+      await AppNotification.createNotification({
+        type: 'user_updated',
+        title: 'Customer Updated',
+        message: `${user.name} (${user.userId}) details have been updated`,
+        relatedUser: user._id,
+        relatedModel: 'User',
+        relatedId: user._id,
+        priority: 'medium',
+        metadata: {
+          userId: user.userId,
+          mobile: user.mobile,
+          updatedBy: req.user._id,
+          updatedFields: Object.keys(req.body)
+        }
+      });
+    } catch (notifError) {
+      console.error('Error creating notification:', notifError);
+      // Continue even if notification fails
+    }
+
     // Emit real-time update event
     socketService.emitUserUpdated({
       _id: user._id,
@@ -480,6 +503,29 @@ exports.toggleUserActive = async (req, res) => {
 
     user.isActive = !user.isActive;
     await user.save();
+
+    // Create AppNotification for owner dashboard
+    const AppNotification = require('../models/AppNotification');
+    try {
+      await AppNotification.createNotification({
+        type: 'user_updated',
+        title: `Customer ${user.isActive ? 'Activated' : 'Deactivated'}`,
+        message: `${user.name} (${user.userId}) has been ${user.isActive ? 'activated' : 'deactivated'}`,
+        relatedUser: user._id,
+        relatedModel: 'User',
+        relatedId: user._id,
+        priority: 'high',
+        metadata: {
+          userId: user.userId,
+          mobile: user.mobile,
+          isActive: user.isActive,
+          toggledBy: req.user._id
+        }
+      });
+    } catch (notifError) {
+      console.error('Error creating notification:', notifError);
+      // Continue even if notification fails
+    }
 
     // Emit real-time update event
     socketService.emitUserUpdated({
@@ -524,6 +570,29 @@ exports.deleteUser = async (req, res) => {
     user.isActive = false;
     user.deletedAt = new Date();
     await user.save();
+
+    // Create AppNotification for owner dashboard
+    const AppNotification = require('../models/AppNotification');
+    try {
+      await AppNotification.createNotification({
+        type: 'user_deleted',
+        title: 'Customer Deleted',
+        message: `${user.name} (${user.userId}) has been deactivated`,
+        relatedUser: user._id,
+        relatedModel: 'User',
+        relatedId: user._id,
+        priority: 'high',
+        metadata: {
+          userId: user.userId,
+          mobile: user.mobile,
+          deletedBy: req.user._id,
+          deletedAt: new Date()
+        }
+      });
+    } catch (notifError) {
+      console.error('Error creating notification:', notifError);
+      // Continue even if notification fails
+    }
 
     // Emit real-time delete event
     socketService.emitUserDeleted(user._id.toString());
