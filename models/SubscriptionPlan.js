@@ -1,5 +1,27 @@
 const mongoose = require('mongoose');
 
+// Weekly Menu Schema
+const mealSchema = new mongoose.Schema({
+  lunch: {
+    type: String,
+    default: ''
+  },
+  dinner: {
+    type: String,
+    default: ''
+  }
+}, { _id: false });
+
+const weeklyMenuSchema = new mongoose.Schema({
+  sunday: { type: mealSchema, default: () => ({}) },
+  monday: { type: mealSchema, default: () => ({}) },
+  tuesday: { type: mealSchema, default: () => ({}) },
+  wednesday: { type: mealSchema, default: () => ({}) },
+  thursday: { type: mealSchema, default: () => ({}) },
+  friday: { type: mealSchema, default: () => ({}) },
+  saturday: { type: mealSchema, default: () => ({}) }
+}, { _id: false });
+
 const subscriptionPlanSchema = new mongoose.Schema({
   name: {
     type: String,
@@ -58,6 +80,11 @@ const subscriptionPlanSchema = new mongoose.Schema({
       default: true
     }
   },
+  // Weekly menu for the subscription plan
+  weeklyMenu: {
+    type: weeklyMenuSchema,
+    default: () => ({})
+  },
   isActive: {
     type: Boolean,
     default: true
@@ -66,6 +93,11 @@ const subscriptionPlanSchema = new mongoose.Schema({
   sortOrder: {
     type: Number,
     default: 0
+  },
+  // Owner who created this plan
+  createdBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
   }
 }, {
   timestamps: true
