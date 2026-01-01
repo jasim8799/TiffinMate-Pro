@@ -451,16 +451,29 @@ exports.setDefaultMeal = async (req, res) => {
 // @access  Private (Owner only)
 exports.getAllMealOrders = async (req, res) => {
   try {
-    const { deliveryDate } = req.query;
-    const filter = {};
+    const { date, deliveryDate } = req.query;
+    
+    // Default to today if no date provided
+    const targetDate = date || deliveryDate;
+    const queryDate = targetDate 
+      ? moment(targetDate).startOf('day').toDate()
+      : moment().startOf('day').toDate();
+    
+    // Get active users only
+    const activeUserIds = await User.find({ 
+      role: 'customer', 
+      isActive: true,
+      deletedAt: { $exists: false }
+    }).distinct('_id');
 
-    if (deliveryDate) {
-      filter.deliveryDate = new Date(deliveryDate);
-    }
+    const filter = {
+      deliveryDate: queryDate,
+      user: { $in: activeUserIds }
+    };
 
     const mealOrders = await MealOrder.find(filter)
       .populate('user', 'name mobile userId')
-      .sort({ deliveryDate: -1, createdAt: -1 });
+      .sort({ mealType: 1, createdAt: -1 });
 
     res.status(200).json({
       success: true,
@@ -591,10 +604,18 @@ exports.getAggregatedMealOrders = async (req, res) => {
     const { date } = req.query;
     const deliveryDate = date ? moment(date).startOf('day').toDate() : moment().startOf('day').toDate();
 
+    // Get active users only
+    const activeUserIds = await User.find({ 
+      role: 'customer', 
+      isActive: true,
+      deletedAt: { $exists: false }
+    }).distinct('_id');
+
     // Get all meal orders for the specified date
     const mealOrders = await MealOrder.find({
       deliveryDate: deliveryDate,
-      status: { $in: ['confirmed', 'preparing', 'ready'] }
+      status: { $in: ['confirmed', 'preparing', 'ready'] },
+      user: { $in: activeUserIds }
     })
     .populate('user', 'name mobile userId address')
     .sort({ mealType: 1, createdAt: 1 });
