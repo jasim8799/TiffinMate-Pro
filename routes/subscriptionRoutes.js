@@ -12,7 +12,11 @@ const {
   getAllSubscriptions,
   renewSubscription,
   togglePauseSubscription,
-  getSubscription
+  getSubscription,
+  requestSubscription,
+  approveSubscription,
+  rejectSubscription,
+  getPendingSubscriptions
 } = require('../controllers/subscriptionController');
 const { protect, authorize } = require('../middleware/auth');
 
@@ -24,11 +28,15 @@ router.get('/plans-with-menus', getPlansWithMenus);
 // Customer routes
 router.post('/select', protect, authorize('customer'), selectPlan);
 router.get('/my-active', protect, getMyActiveSubscription);
+router.post('/request', protect, authorize('customer'), requestSubscription);
 
 // Owner routes
 router.post('/', protect, authorize('owner'), createSubscription);
 router.get('/', protect, authorize('owner'), getAllSubscriptions);
+router.get('/pending', protect, authorize('owner'), getPendingSubscriptions);
 router.put('/:id/status', protect, authorize('owner'), updateSubscriptionStatus);
+router.patch('/:id/approve', protect, authorize('owner'), approveSubscription);
+router.patch('/:id/reject', protect, authorize('owner'), rejectSubscription);
 router.get('/user/:userId', protect, getUserSubscriptions);
 router.get('/:id', protect, getSubscription);
 router.post('/:id/renew', protect, authorize('owner'), renewSubscription);

@@ -771,3 +771,319 @@ exports.getSubscription = async (req, res) => {
     });
   }
 };
+
+// @desc    User requests a subscription (pending approval)
+// @route   POST /api/subscriptions/request
+// @access  Private (Customer)
+exports.requestSubscription = async (req, res) => {
+  try {
+    const { planId, paymentMode } = req.body;
+    const userId = req.user._id;
+
+    if (!planId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please select a subscription plan'
+      });
+    }
+
+    // Check if plan exists
+    const plan = await SubscriptionPlan.findById(planId);
+    if (!plan || !plan.isActive) {
+      return res.status(404).json({
+        success: false,
+        message: 'Subscription plan not found or inactive'
+      });
+    }
+
+    // Check for existing pending or active subscriptions
+    const existingSubscription = await Subscription.findOne({
+      user: userId,
+      status: { $in: ['pending_approval', 'active'] }
+    });
+
+    if (existingSubscription) {
+      return res.status(400).json({
+        success: false,
+        message: existingSubscription.status === 'active' 
+          ? 'You already have an active subscription' 
+          : 'You already have a pending subscription request',
+        data: {
+          existingSubscription: {
+            id: existingSubscription._id,
+            planType: existingSubscription.planType,
+            status: existingSubscription.status,
+            startDate: existingSubscription.startDate,
+            endDate: existingSubscription.endDate
+          }
+        }
+      });
+    }
+
+    // Create subscription request with pending_approval status
+    const startDate = moment().startOf('day');
+    let endDate, totalDays;
+
+    switch (plan.durationType) {
+      case 'daily':
+        endDate = moment(startDate);
+        totalDays = 1;
+        break;
+      case 'weekly':
+        endDate = moment(startDate).add(6, 'days');
+        totalDays = 7;
+        break;
+      case 'monthly':
+        endDate = moment(startDate).add(1, 'month').subtract(1, 'day');
+        totalDays = endDate.diff(startDate, 'days') + 1;
+        break;
+      default:
+        totalDays = plan.durationDays;
+        endDate = moment(startDate).add(totalDays - 1, 'days');
+    }
+
+    const subscription = await Subscription.create({
+      user: userId,
+      planType: plan.durationType,
+      startDate: startDate.toDate(),
+      endDate: endDate.toDate(),
+      totalDays,
+      remainingDays: totalDays,
+      amount: plan.totalPrice,
+      paymentMode: paymentMode || 'cash',
+      status: 'pending_approval',
+      mealPreferences: {
+        includesLunch: plan.mealTypes.lunch,
+        includesDinner: plan.mealTypes.dinner
+      },
+      planDetails: {
+        planId: plan._id,
+        planName: plan.name,
+        planType: plan.type
+      }
+    });
+
+    // Create notification for owner
+    await AppNotification.create({
+      recipient: null, // Owner notification
+      recipientRole: 'owner',
+      type: 'subscription_request',
+      title: 'New Subscription Request',
+      message: `${req.user.name} has requested a ${plan.name} subscription`,
+      data: {
+        subscriptionId: subscription._id,
+        userId: userId,
+        userName: req.user.name,
+        planName: plan.name
+      }
+    });
+
+    // Emit socket event to owner
+    socketService.emitToOwner('subscription_request', {
+      subscriptionId: subscription._id,
+      userId: userId,
+      userName: req.user.name,
+      planName: plan.name,
+      amount: plan.totalPrice
+    });
+
+    res.status(201).json({
+      success: true,
+      message: 'Subscription request sent successfully. Waiting for owner approval.',
+      data: subscription
+    });
+  } catch (error) {
+    console.error('Request subscription error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error creating subscription request',
+      error: error.message
+    });
+  }
+};
+
+// @desc    Owner approves a subscription request
+// @route   PATCH /api/subscriptions/:id/approve
+// @access  Private (Owner)
+exports.approveSubscription = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { startDate } = req.body; // Optional: owner can change start date
+
+    const subscription = await Subscription.findById(id).populate('user');
+    
+    if (!subscription) {
+      return res.status(404).json({
+        success: false,
+        message: 'Subscription not found'
+      });
+    }
+
+    if (subscription.status !== 'pending_approval') {
+      return res.status(400).json({
+        success: false,
+        message: `Cannot approve subscription with status: ${subscription.status}`
+      });
+    }
+
+    // Update start and end dates if owner provided new start date
+    if (startDate) {
+      const start = moment(startDate);
+      let end;
+      
+      switch (subscription.planType) {
+        case 'daily':
+          end = moment(startDate);
+          break;
+        case 'weekly':
+          end = moment(startDate).add(6, 'days');
+          break;
+        case 'monthly':
+          end = moment(startDate).add(1, 'month').subtract(1, 'day');
+          break;
+        default:
+          end = moment(startDate).add(subscription.totalDays - 1, 'days');
+      }
+      
+      subscription.startDate = start.toDate();
+      subscription.endDate = end.toDate();
+    }
+
+    subscription.status = 'active';
+    subscription.approvedBy = req.user._id;
+    subscription.approvedAt = new Date();
+    await subscription.save();
+
+    // Enable user account
+    const user = await User.findById(subscription.user._id);
+    if (user) {
+      user.isActive = true;
+      await user.save();
+    }
+
+    // Create notification for customer
+    await AppNotification.create({
+      recipient: subscription.user._id,
+      recipientRole: 'customer',
+      type: 'subscription_approved',
+      title: 'Subscription Approved!',
+      message: `Your subscription has been approved and is now active`,
+      data: {
+        subscriptionId: subscription._id,
+        startDate: subscription.startDate,
+        endDate: subscription.endDate
+      }
+    });
+
+    // Emit socket event to customer
+    socketService.emitToUser(subscription.user._id.toString(), 'subscription_approved', {
+      subscriptionId: subscription._id,
+      startDate: subscription.startDate,
+      endDate: subscription.endDate,
+      status: 'active'
+    });
+
+    res.status(200).json({
+      success: true,
+      message: 'Subscription approved successfully',
+      data: subscription
+    });
+  } catch (error) {
+    console.error('Approve subscription error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error approving subscription',
+      error: error.message
+    });
+  }
+};
+
+// @desc    Owner rejects a subscription request
+// @route   PATCH /api/subscriptions/:id/reject
+// @access  Private (Owner)
+exports.rejectSubscription = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { reason } = req.body; // Optional rejection reason
+
+    const subscription = await Subscription.findById(id).populate('user');
+    
+    if (!subscription) {
+      return res.status(404).json({
+        success: false,
+        message: 'Subscription not found'
+      });
+    }
+
+    if (subscription.status !== 'pending_approval') {
+      return res.status(400).json({
+        success: false,
+        message: `Cannot reject subscription with status: ${subscription.status}`
+      });
+    }
+
+    subscription.status = 'rejected';
+    subscription.rejectedBy = req.user._id;
+    subscription.rejectedAt = new Date();
+    subscription.rejectionReason = reason || 'No reason provided';
+    await subscription.save();
+
+    // Create notification for customer
+    await AppNotification.create({
+      recipient: subscription.user._id,
+      recipientRole: 'customer',
+      type: 'subscription_rejected',
+      title: 'Subscription Request Rejected',
+      message: reason || 'Your subscription request was rejected',
+      data: {
+        subscriptionId: subscription._id,
+        reason: reason
+      }
+    });
+
+    // Emit socket event to customer
+    socketService.emitToUser(subscription.user._id.toString(), 'subscription_rejected', {
+      subscriptionId: subscription._id,
+      reason: reason || 'No reason provided'
+    });
+
+    res.status(200).json({
+      success: true,
+      message: 'Subscription rejected',
+      data: subscription
+    });
+  } catch (error) {
+    console.error('Reject subscription error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error rejecting subscription',
+      error: error.message
+    });
+  }
+};
+
+// @desc    Get pending subscription requests (for owner)
+// @route   GET /api/subscriptions/pending
+// @access  Private (Owner)
+exports.getPendingSubscriptions = async (req, res) => {
+  try {
+    const pendingSubscriptions = await Subscription.find({
+      status: 'pending_approval'
+    })
+      .populate('user', 'name mobile email address')
+      .sort({ createdAt: -1 });
+
+    res.status(200).json({
+      success: true,
+      count: pendingSubscriptions.length,
+      data: pendingSubscriptions
+    });
+  } catch (error) {
+    console.error('Get pending subscriptions error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching pending subscriptions',
+      error: error.message
+    });
+  }
+};
