@@ -29,6 +29,15 @@ exports.selectMeal = async (req, res) => {
       });
     }
 
+    // Validate that at least one meal is selected
+    if (!lunch && !dinner) {
+      console.log('⚠️ No meals selected - both lunch and dinner are null/undefined');
+      return res.status(400).json({
+        success: false,
+        message: 'Please select at least one meal (lunch or dinner)'
+      });
+    }
+
     // ========== SUBSCRIPTION & TRIAL VALIDATION ==========
     // Get user's active subscription
     const subscription = await Subscription.findOne({
@@ -76,8 +85,10 @@ exports.selectMeal = async (req, res) => {
 
     // Helper function to check if meal contains non-veg items
     const nonVegKeywords = ['CHICKEN', 'EGG', 'MUTTON', 'FISH', 'KEEMA', 'TANDOORI', 'BIRYANI', 'KORMA', 'BUTTER CHICKEN', 'HYDRABADI', 'MURADABADI'];
-    const isNonVeg = (mealName) => {
-      if (!mealName) return false;
+    const isNonVeg = (meal) => {
+      if (!meal) return false;
+      // Handle both string and object formats
+      const mealName = typeof meal === 'string' ? meal : (meal.name || '');
       const upperMeal = mealName.toUpperCase();
       return nonVegKeywords.some(keyword => upperMeal.includes(keyword));
     };
@@ -309,11 +320,15 @@ exports.selectMeal = async (req, res) => {
       message: 'Meal selection saved successfully'
     });
   } catch (error) {
-    console.error('Select meal error:', error);
+    console.error('❌ Select meal error:', error);
+    console.error('   Error name:', error.name);
+    console.error('   Error message:', error.message);
+    console.error('   Stack trace:', error.stack);
+    
     res.status(500).json({
       success: false,
-      message: 'Error selecting meal',
-      error: error.message
+      message: error.message || 'Error selecting meal',
+      errorDetails: error.name
     });
   }
 };
