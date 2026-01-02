@@ -281,6 +281,10 @@ exports.selectMeal = async (req, res) => {
       customerId: user?.userId
     });
 
+    console.log(`✅ Meal saved for user ${req.user._id} on ${deliveryMoment.format('YYYY-MM-DD')}:`);
+    console.log(`   Lunch: ${lunch?.name || 'Not selected'}`);
+    console.log(`   Dinner: ${dinner?.name || 'Not selected'}`);
+
     res.status(200).json({
       success: true,
       message: 'Meal selection saved successfully'
@@ -352,6 +356,10 @@ exports.getMyMealSelection = async (req, res) => {
     }).sort({ createdAt: -1 });
 
     const dietaryPreference = subscription?.mealPreferences?.dietaryPreference || 'both';
+
+    console.log(`📊 Fetching meal for user ${req.user._id} on ${deliveryMoment.format('YYYY-MM-DD')}:`);
+    console.log(`   Lunch: ${lunchMeal?.name || 'Not selected'}`);
+    console.log(`   Dinner: ${dinnerMeal?.name || 'Not selected'}`);
 
     res.status(200).json({
       success: true,
