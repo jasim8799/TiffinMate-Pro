@@ -186,6 +186,7 @@ exports.selectMeal = async (req, res) => {
       // Allow changing default meals - user can override default selection
       if (existingLunch) {
         existingLunch.selectedMeal = lunch;
+        existingLunch.status = 'confirmed';
         // Remove isDefault flag when user manually selects a meal
         if (existingLunch.selectedMeal) {
           existingLunch.selectedMeal.isDefault = false;
@@ -219,6 +220,7 @@ exports.selectMeal = async (req, res) => {
       // Allow changing default meals - user can override default selection
       if (existingDinner) {
         existingDinner.selectedMeal = dinner;
+        existingDinner.status = 'confirmed';
         // Remove isDefault flag when user manually selects a meal
         if (existingDinner.selectedMeal) {
           existingDinner.selectedMeal.isDefault = false;
@@ -677,7 +679,6 @@ exports.getAggregatedMealOrders = async (req, res) => {
     // Get all meal orders for the specified date
     const mealOrders = await MealOrder.find({
       deliveryDate: deliveryDate,
-      status: { $in: ['confirmed', 'preparing', 'ready'] },
       user: { $in: activeUserIds }
     })
     .populate('user', 'name mobile userId address')
