@@ -414,10 +414,12 @@ exports.getMyMealSelection = async (req, res) => {
     }).sort({ createdAt: -1 });
 
     const dietaryPreference = subscription?.mealPreferences?.dietaryPreference || 'both';
+    const subscriptionPlanType = subscription?.planType || 'classic';
 
     console.log(`📊 Fetching meal for user ${req.user._id} on ${deliveryMoment.format('YYYY-MM-DD')}:`);
     console.log(`   Lunch: ${lunchMeal?.name || 'Not selected'}`);
     console.log(`   Dinner: ${dinnerMeal?.name || 'Not selected'}`);
+    console.log(`   Subscription Plan: ${subscriptionPlanType}`);
 
     res.status(200).json({
       success: true,
@@ -431,7 +433,8 @@ exports.getMyMealSelection = async (req, res) => {
         lunchCutoff: lunchCutoff.toISOString(),
         dinnerCutoff: dinnerCutoff.toISOString(),
         defaultMeals: defaultMeals,
-        dietaryPreference: dietaryPreference
+        dietaryPreference: dietaryPreference,
+        subscriptionPlanType: subscriptionPlanType
       }
     });
   } catch (error) {
