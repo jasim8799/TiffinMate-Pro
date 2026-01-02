@@ -749,10 +749,14 @@ exports.getAggregatedMealOrders = async (req, res) => {
     const lunchCounts = {};
     const dinnerCounts = {};
     const customerDetails = [];
+    const ingredientCounts = {};
+    let totalLunchOrders = 0;
+    let totalDinnerOrders = 0;
 
     mealOrders.forEach(order => {
       const mealName = order.selectedMeal?.name || 'Not Selected';
       const mealType = order.mealType;
+      const mealItems = order.selectedMeal?.items || [];
       
       // Add to customer details
       customerDetails.push({
@@ -769,8 +773,22 @@ exports.getAggregatedMealOrders = async (req, res) => {
       // Aggregate counts
       if (mealType === 'lunch') {
         lunchCounts[mealName] = (lunchCounts[mealName] || 0) + 1;
+        totalLunchOrders++;
       } else if (mealType === 'dinner') {
         dinnerCounts[mealName] = (dinnerCounts[mealName] || 0) + 1;
+        totalDinnerOrders++;
+      }
+
+      // Aggregate ingredients from items array
+      if (mealItems && Array.isArray(mealItems)) {
+        mealItems.forEach(item => {
+          if (item && typeof item === 'string') {
+            const normalizedItem = item.trim();
+            if (normalizedItem) {
+              ingredientCounts[normalizedItem] = (ingredientCounts[normalizedItem] || 0) + 1;
+            }
+          }
+        });
       }
     });
 
@@ -785,6 +803,24 @@ exports.getAggregatedMealOrders = async (req, res) => {
       count
     })).sort((a, b) => b.count - a.count);
 
+    // Create Order Summary
+    const orderSummary = {
+      Lunch: totalLunchOrders,
+      Dinner: totalDinnerOrders,
+      Total: totalLunchOrders + totalDinnerOrders
+    };
+
+    // Create Ingredient Summary (sorted by count descending)
+    const ingredientSummary = Object.entries(ingredientCounts)
+      .sort((a, b) => b[1] - a[1])
+      .reduce((obj, [ingredient, count]) => {
+        obj[ingredient] = count;
+        return obj;
+      }, {});
+
+    console.log('   📊 Order Summary:', orderSummary);
+    console.log('   🥘 Ingredient Summary:', ingredientSummary);
+
     res.status(200).json({
       success: true,
       data: {
@@ -792,9 +828,11 @@ exports.getAggregatedMealOrders = async (req, res) => {
         totalOrders: mealOrders.length,
         lunchSummary,
         dinnerSummary,
-        totalLunch: Object.values(lunchCounts).reduce((a, b) => a + b, 0),
-        totalDinner: Object.values(dinnerCounts).reduce((a, b) => a + b, 0),
-        customerDetails
+        totalLunch: totalLunchOrders,
+        totalDinner: totalDinnerOrders,
+        customerDetails,
+        orderSummary,
+        ingredientSummary
       }
     });
   } catch (error) {
