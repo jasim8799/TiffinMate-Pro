@@ -41,25 +41,25 @@ exports.getDashboardStats = async (req, res) => {
     
     const todayDeliveries = await Delivery.countDocuments({
       deliveryDate: { $gte: today, $lt: tomorrow },
-      userId: { $in: activeUserIds }
+      user: { $in: activeUserIds }
     });
 
     // Pending payments - exclude deleted users
     const pendingPayments = await Payment.countDocuments({
       paymentStatus: { $in: ['pending', 'partial'] },
-      userId: { $in: activeUserIds }
+      user: { $in: activeUserIds }
     });
 
     const overduePayments = await Payment.countDocuments({
       paymentStatus: 'overdue',
-      userId: { $in: activeUserIds }
+      user: { $in: activeUserIds }
     });
 
     // Expiring subscriptions (next 7 days) - exclude deleted users
     const sevenDaysFromNow = moment().add(7, 'days').endOf('day').toDate();
     const expiringSubscriptions = await Subscription.countDocuments({
       status: 'active',
-      userId: { $in: activeUserIds },
+      user: { $in: activeUserIds },
       endDate: { $gte: today, $lte: sevenDaysFromNow }
     });
 
@@ -72,7 +72,7 @@ exports.getDashboardStats = async (req, res) => {
         $match: {
           paymentDate: { $gte: monthStart, $lte: monthEnd },
           paymentStatus: 'paid',
-          userId: { $in: activeUserIds }
+          user: { $in: activeUserIds }
         }
       },
       {
@@ -91,7 +91,7 @@ exports.getDashboardStats = async (req, res) => {
         $match: {
           paymentDate: { $gte: today, $lt: tomorrow },
           paymentStatus: 'paid',
-          userId: { $in: activeUserIds }
+          user: { $in: activeUserIds }
         }
       },
       {
@@ -109,7 +109,7 @@ exports.getDashboardStats = async (req, res) => {
       {
         $match: {
           paymentStatus: { $in: ['pending', 'partial'] },
-          userId: { $in: activeUserIds }
+          user: { $in: activeUserIds }
         }
       },
       {
