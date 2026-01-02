@@ -187,6 +187,7 @@ exports.selectMeal = async (req, res) => {
       if (existingLunch) {
         existingLunch.selectedMeal = lunch;
         existingLunch.status = 'confirmed';
+        existingLunch.subscription = subscription._id;
         // Remove isDefault flag when user manually selects a meal
         if (existingLunch.selectedMeal) {
           existingLunch.selectedMeal.isDefault = false;
@@ -196,6 +197,7 @@ exports.selectMeal = async (req, res) => {
       } else {
         const newLunch = await MealOrder.create({
           user: req.user._id,
+          subscription: subscription._id,
           orderDate: new Date(),
           deliveryDate: deliveryMoment.toDate(),
           mealType: 'lunch',
@@ -206,6 +208,7 @@ exports.selectMeal = async (req, res) => {
         });
         console.log('✅ Created new lunch order:', newLunch._id);
         console.log('   Saved with deliveryDate:', newLunch.deliveryDate);
+        console.log('   Linked to subscription:', subscription._id);
       }
     }
 
@@ -221,6 +224,7 @@ exports.selectMeal = async (req, res) => {
       if (existingDinner) {
         existingDinner.selectedMeal = dinner;
         existingDinner.status = 'confirmed';
+        existingDinner.subscription = subscription._id;
         // Remove isDefault flag when user manually selects a meal
         if (existingDinner.selectedMeal) {
           existingDinner.selectedMeal.isDefault = false;
@@ -230,6 +234,7 @@ exports.selectMeal = async (req, res) => {
       } else {
         const newDinner = await MealOrder.create({
           user: req.user._id,
+          subscription: subscription._id,
           orderDate: new Date(),
           deliveryDate: deliveryMoment.toDate(),
           mealType: 'dinner',
@@ -240,6 +245,7 @@ exports.selectMeal = async (req, res) => {
         });
         console.log('✅ Created new dinner order:', newDinner._id);
         console.log('   Saved with deliveryDate:', newDinner.deliveryDate);
+        console.log('   Linked to subscription:', subscription._id);
       }
     }
 
@@ -310,6 +316,16 @@ exports.selectMeal = async (req, res) => {
     console.log(`✅ Meal saved for user ${req.user._id} on ${deliveryMoment.format('YYYY-MM-DD')}:`);
     console.log(`   Lunch: ${lunch?.name || 'Not selected'} (saved to DB)`);
     console.log(`   Dinner: ${dinner?.name || 'Not selected'} (saved to DB)`);
+
+    // Verify meals were saved by querying DB
+    const verifyMeals = await MealOrder.find({
+      user: req.user._id,
+      deliveryDate: { $gte: deliveryMoment.startOf('day').toDate(), $lt: deliveryMoment.clone().add(1, 'day').startOf('day').toDate() }
+    });
+    console.log(`   DB Verification: Found ${verifyMeals.length} meal orders in DB for this date`);
+    verifyMeals.forEach(m => {
+      console.log(`   - ${m.mealType}: ${m.selectedMeal?.name}, status: ${m.status}, subscription: ${m.subscription}`);
+    });
 
     res.status(200).json({
       success: true,
@@ -693,6 +709,23 @@ exports.getAggregatedMealOrders = async (req, res) => {
     console.log('   Date range:', deliveryDateStart, 'to', deliveryDateEnd);
     console.log('   Active users count:', activeUserIds.length);
     console.log('   Found meal orders:', mealOrders.length);
+    
+    // Debug: Show first few meal orders
+    if (mealOrders.length > 0) {
+      console.log('   Sample meal orders:');
+      mealOrders.slice(0, 3).forEach((order, i) => {
+        console.log(`   [${i}] ${order.user?.name} - ${order.mealType}: ${order.selectedMeal?.name}, status: ${order.status}`);
+      });
+    } else {
+      console.log('   ⚠️ NO MEAL ORDERS FOUND! Checking database...');
+      // Check if ANY meal orders exist
+      const anyMeals = await MealOrder.countDocuments({});
+      console.log(`   Total meal orders in DB: ${anyMeals}`);
+      const todayAnyUser = await MealOrder.countDocuments({
+        deliveryDate: { $gte: deliveryDateStart, $lt: deliveryDateEnd }
+      });
+      console.log(`   Meal orders for date (any user): ${todayAnyUser}`);
+    }
 
     // Aggregate meal counts
     const lunchCounts = {};

@@ -6,6 +6,10 @@ const mealOrderSchema = new mongoose.Schema({
     ref: 'User',
     required: true
   },
+  subscription: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Subscription'
+  },
   delivery: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Delivery'

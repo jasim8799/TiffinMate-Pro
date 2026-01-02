@@ -55,6 +55,16 @@ exports.getDashboardStats = async (req, res) => {
     console.log('   Date range:', today, 'to', tomorrow);
     console.log('   Active users count:', activeUserIds.length);
     console.log('   Today meal orders count:', todayMealOrders);
+    
+    // Debug: Check if ANY meal orders exist at all
+    if (todayMealOrders === 0) {
+      const totalMealOrders = await MealOrder.countDocuments({});
+      console.log('   ⚠️ Total meal orders in DB:', totalMealOrders);
+      const anyDateOrders = await MealOrder.countDocuments({
+        deliveryDate: { $gte: today, $lt: tomorrow }
+      });
+      console.log('   ⚠️ Meal orders for date (any user):', anyDateOrders);
+    }
 
     // Pending payments - exclude deleted users
     const pendingPayments = await Payment.countDocuments({

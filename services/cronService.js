@@ -287,6 +287,7 @@ class CronService {
           // Create default meal order
           await MealOrder.create({
             user: subscription.user._id,
+            subscription: subscription._id,
             orderDate: new Date(),
             deliveryDate: deliveryDate,
             mealType: mealType,
