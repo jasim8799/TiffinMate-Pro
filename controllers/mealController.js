@@ -16,6 +16,12 @@ exports.selectMeal = async (req, res) => {
   try {
     const { deliveryDate, lunch, dinner } = req.body;
 
+    console.log('📥 Received meal selection request:');
+    console.log('   User:', req.user._id);
+    console.log('   Date:', deliveryDate);
+    console.log('   Lunch:', JSON.stringify(lunch));
+    console.log('   Dinner:', JSON.stringify(dinner));
+
     if (!deliveryDate) {
       return res.status(400).json({
         success: false,
@@ -170,8 +176,9 @@ exports.selectMeal = async (req, res) => {
       if (existingLunch) {
         existingLunch.selectedMeal = lunch;
         await existingLunch.save();
+        console.log('✅ Updated existing lunch order:', existingLunch._id);
       } else {
-        await MealOrder.create({
+        const newLunch = await MealOrder.create({
           user: req.user._id,
           orderDate: new Date(),
           deliveryDate: deliveryMoment.toDate(),
@@ -181,6 +188,7 @@ exports.selectMeal = async (req, res) => {
           isAfterCutoff: false,
           status: 'confirmed'
         });
+        console.log('✅ Created new lunch order:', newLunch._id);
       }
     }
 
@@ -203,8 +211,9 @@ exports.selectMeal = async (req, res) => {
       if (existingDinner) {
         existingDinner.selectedMeal = dinner;
         await existingDinner.save();
+        console.log('✅ Updated existing dinner order:', existingDinner._id);
       } else {
-        await MealOrder.create({
+        const newDinner = await MealOrder.create({
           user: req.user._id,
           orderDate: new Date(),
           deliveryDate: deliveryMoment.toDate(),
@@ -214,6 +223,7 @@ exports.selectMeal = async (req, res) => {
           isAfterCutoff: false,
           status: 'confirmed'
         });
+        console.log('✅ Created new dinner order:', newDinner._id);
       }
     }
 
@@ -282,8 +292,8 @@ exports.selectMeal = async (req, res) => {
     });
 
     console.log(`✅ Meal saved for user ${req.user._id} on ${deliveryMoment.format('YYYY-MM-DD')}:`);
-    console.log(`   Lunch: ${lunch?.name || 'Not selected'}`);
-    console.log(`   Dinner: ${dinner?.name || 'Not selected'}`);
+    console.log(`   Lunch: ${lunch?.name || 'Not selected'} (saved to DB)`);
+    console.log(`   Dinner: ${dinner?.name || 'Not selected'} (saved to DB)`);
 
     res.status(200).json({
       success: true,
