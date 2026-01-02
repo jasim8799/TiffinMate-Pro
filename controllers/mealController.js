@@ -687,22 +687,17 @@ exports.getAggregatedMealOrders = async (req, res) => {
   try {
     const { date } = req.query;
     
-    // Parse date in LOCAL timezone to avoid UTC midnight mismatch
-    let targetDate;
-    if (date) {
-      // Parse date string as local date (YYYY-MM-DD)
-      targetDate = moment(date, 'YYYY-MM-DD').startOf('day');
-    } else {
-      // Default to TOMORROW if no date provided (users order for next day)
-      targetDate = moment().add(1, 'day').startOf('day');
-    }
-    
+    // CRITICAL: Always use tomorrow's date for meal orders
+    // Users select meals for TOMORROW, so we MUST query TOMORROW
+    // Ignore date parameter to avoid mismatches - always query tomorrow
+    const targetDate = moment().add(1, 'day').startOf('day');
     const deliveryDateStart = targetDate.toDate();
     const deliveryDateEnd = targetDate.clone().add(1, 'day').toDate();
 
     console.log('🍽️ Kitchen Aggregated Data:');
-    console.log('   Query param date:', date || 'not provided (defaulting to tomorrow)');
-    console.log('   Target date (local):', targetDate.format('YYYY-MM-DD HH:mm:ss'));
+    console.log('   ⚠️  FIXED: Always querying TOMORROW (users order for next day)');
+    console.log('   Query param date (IGNORED):', date || 'not provided');
+    console.log('   Using TOMORROW date:', targetDate.format('YYYY-MM-DD'));
     console.log('   Date range START:', deliveryDateStart);
     console.log('   Date range END:', deliveryDateEnd);
 
