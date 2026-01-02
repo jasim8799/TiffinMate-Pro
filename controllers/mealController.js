@@ -183,16 +183,13 @@ exports.selectMeal = async (req, res) => {
         mealType: 'lunch'
       });
 
-      // Check if it's a default order (cannot be changed)
-      if (existingLunch && existingLunch.selectedMeal?.isDefault) {
-        return res.status(400).json({
-          success: false,
-          message: 'Lunch has been auto-assigned with default menu. Cannot be changed.'
-        });
-      }
-
+      // Allow changing default meals - user can override default selection
       if (existingLunch) {
         existingLunch.selectedMeal = lunch;
+        // Remove isDefault flag when user manually selects a meal
+        if (existingLunch.selectedMeal) {
+          existingLunch.selectedMeal.isDefault = false;
+        }
         await existingLunch.save();
         console.log('✅ Updated existing lunch order:', existingLunch._id);
       } else {
@@ -219,16 +216,13 @@ exports.selectMeal = async (req, res) => {
         mealType: 'dinner'
       });
 
-      // Check if it's a default order (cannot be changed)
-      if (existingDinner && existingDinner.selectedMeal?.isDefault) {
-        return res.status(400).json({
-          success: false,
-          message: 'Dinner has been auto-assigned with default menu. Cannot be changed.'
-        });
-      }
-
+      // Allow changing default meals - user can override default selection
       if (existingDinner) {
         existingDinner.selectedMeal = dinner;
+        // Remove isDefault flag when user manually selects a meal
+        if (existingDinner.selectedMeal) {
+          existingDinner.selectedMeal.isDefault = false;
+        }
         await existingDinner.save();
         console.log('✅ Updated existing dinner order:', existingDinner._id);
       } else {
@@ -400,9 +394,9 @@ exports.getMyMealSelection = async (req, res) => {
       }
     });
 
-    // Check if locked (either past cutoff or default assigned)
-    const lunchLocked = now.isAfter(lunchCutoff) || lunchIsDefault;
-    const dinnerLocked = now.isAfter(dinnerCutoff) || dinnerIsDefault;
+    // Check if locked (past cutoff time only - default meals are editable)
+    const lunchLocked = now.isAfter(lunchCutoff);
+    const dinnerLocked = now.isAfter(dinnerCutoff);
 
     // Get default meals
     const defaultMeals = await DefaultMeal.find({ isActive: true });
