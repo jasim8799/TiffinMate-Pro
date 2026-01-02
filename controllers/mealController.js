@@ -686,9 +686,15 @@ exports.getWeeklyMenu = async (req, res) => {
 exports.getAggregatedMealOrders = async (req, res) => {
   try {
     const { date } = req.query;
-    const targetDate = date ? moment(date).startOf('day') : moment().startOf('day');
+    // Default to TOMORROW if no date provided (users order for next day)
+    const targetDate = date ? moment(date).startOf('day') : moment().add(1, 'day').startOf('day');
     const deliveryDateStart = targetDate.toDate();
     const deliveryDateEnd = targetDate.clone().add(1, 'day').toDate();
+
+    console.log('🍽️ Kitchen Aggregated Data:');
+    console.log('   Query param date:', date || 'not provided (defaulting to tomorrow)');
+    console.log('   Target date:', targetDate.format('YYYY-MM-DD'));
+    console.log('   Date range:', deliveryDateStart, 'to', deliveryDateEnd);
 
     // Get active users only
     const activeUserIds = await User.find({ 
@@ -705,8 +711,6 @@ exports.getAggregatedMealOrders = async (req, res) => {
     .populate('user', 'name mobile userId address')
     .sort({ mealType: 1, createdAt: 1 });
 
-    console.log('🍽️ Kitchen Aggregated Data:');
-    console.log('   Date range:', deliveryDateStart, 'to', deliveryDateEnd);
     console.log('   Active users count:', activeUserIds.length);
     console.log('   Found meal orders:', mealOrders.length);
     

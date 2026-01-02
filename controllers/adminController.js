@@ -31,6 +31,7 @@ exports.getDashboardStats = async (req, res) => {
 
     // Tomorrow's deliveries and meal orders (users select for next day)
     // Users order meals for TOMORROW, not today
+    const today = moment().startOf('day').toDate();
     const tomorrow = moment().add(1, 'day').startOf('day').toDate();
     const dayAfter = moment().add(2, 'days').startOf('day').toDate();
     
@@ -91,7 +92,7 @@ exports.getDashboardStats = async (req, res) => {
     const expiringSubscriptions = await Subscription.countDocuments({
       status: 'active',
       user: { $in: activeUserIds },
-      endDate: { $gte: today, $lte: sevenDaysFromNow }
+      endDate: { $gte: tomorrow, $lte: sevenDaysFromNow }
     });
 
     // Revenue calculations (this month)
