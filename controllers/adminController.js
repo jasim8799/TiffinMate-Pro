@@ -51,6 +51,11 @@ exports.getDashboardStats = async (req, res) => {
       user: { $in: activeUserIds }
     });
 
+    console.log('📊 Dashboard Stats - Meal Orders:');
+    console.log('   Date range:', today, 'to', tomorrow);
+    console.log('   Active users count:', activeUserIds.length);
+    console.log('   Today meal orders count:', todayMealOrders);
+
     // Pending payments - exclude deleted users
     const pendingPayments = await Payment.countDocuments({
       paymentStatus: { $in: ['pending', 'partial'] },

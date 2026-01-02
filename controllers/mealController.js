@@ -520,9 +520,12 @@ exports.getAllMealOrders = async (req, res) => {
     
     // Default to today if no date provided
     const targetDate = date || deliveryDate;
-    const queryDate = targetDate 
-      ? moment(targetDate).startOf('day').toDate()
-      : moment().startOf('day').toDate();
+    const targetMoment = targetDate 
+      ? moment(targetDate).startOf('day')
+      : moment().startOf('day');
+    
+    const queryDateStart = targetMoment.toDate();
+    const queryDateEnd = targetMoment.clone().add(1, 'day').toDate();
     
     // Get active users only
     const activeUserIds = await User.find({ 
@@ -532,7 +535,7 @@ exports.getAllMealOrders = async (req, res) => {
     }).distinct('_id');
 
     const filter = {
-      deliveryDate: queryDate,
+      deliveryDate: { $gte: queryDateStart, $lt: queryDateEnd },
       user: { $in: activeUserIds }
     };
 
@@ -667,7 +670,9 @@ exports.getWeeklyMenu = async (req, res) => {
 exports.getAggregatedMealOrders = async (req, res) => {
   try {
     const { date } = req.query;
-    const deliveryDate = date ? moment(date).startOf('day').toDate() : moment().startOf('day').toDate();
+    const targetDate = date ? moment(date).startOf('day') : moment().startOf('day');
+    const deliveryDateStart = targetDate.toDate();
+    const deliveryDateEnd = targetDate.clone().add(1, 'day').toDate();
 
     // Get active users only
     const activeUserIds = await User.find({ 
@@ -676,13 +681,18 @@ exports.getAggregatedMealOrders = async (req, res) => {
       deletedAt: { $exists: false }
     }).distinct('_id');
 
-    // Get all meal orders for the specified date
+    // Get all meal orders for the specified date (using date range)
     const mealOrders = await MealOrder.find({
-      deliveryDate: deliveryDate,
+      deliveryDate: { $gte: deliveryDateStart, $lt: deliveryDateEnd },
       user: { $in: activeUserIds }
     })
     .populate('user', 'name mobile userId address')
     .sort({ mealType: 1, createdAt: 1 });
+
+    console.log('🍽️ Kitchen Aggregated Data:');
+    console.log('   Date range:', deliveryDateStart, 'to', deliveryDateEnd);
+    console.log('   Active users count:', activeUserIds.length);
+    console.log('   Found meal orders:', mealOrders.length);
 
     // Aggregate meal counts
     const lunchCounts = {};
@@ -727,7 +737,7 @@ exports.getAggregatedMealOrders = async (req, res) => {
     res.status(200).json({
       success: true,
       data: {
-        date: deliveryDate,
+        date: deliveryDateStart,
         totalOrders: mealOrders.length,
         lunchSummary,
         dinnerSummary,
