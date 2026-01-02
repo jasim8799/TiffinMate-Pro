@@ -38,7 +38,7 @@ const defaultPlans = [
   // ============================================
   {
     name: 'classic-monthly-both',
-    displayName: 'Classic Menu (Monthly)',
+    displayName: 'Classic Menu',
     description: '30 days Mix Veg & Non-Veg with weekly rotating menu - Best Value!',
     durationType: 'monthly',
     durationDays: 30,
@@ -48,6 +48,36 @@ const defaultPlans = [
     type: 'MIX',
     menuCategory: 'classic',
     mealTypes: { lunch: true, dinner: true },
+    weeklyMenu: {
+      sunday: {
+        lunch: 'MIX-VEG, DAL, RICE & SALAD',
+        dinner: 'CHICKEN BIRYANI, SALAD & RAITA'
+      },
+      monday: {
+        lunch: 'AALOO SOYABEEN, RICE & SALAD',
+        dinner: 'SEASONAL VEG, ROTI & SALAD'
+      },
+      tuesday: {
+        lunch: 'RAJMA, RICE & RAITA',
+        dinner: 'KADAI PANEER, ROTI & HALWA'
+      },
+      wednesday: {
+        lunch: 'CHICKEN CURRY, RICE & SALAD',
+        dinner: 'DAL FRY, ROTI & SALAD'
+      },
+      thursday: {
+        lunch: 'VEGETABLE, RICE & SALAD',
+        dinner: 'MIX-VEG, ROTI & SALAD'
+      },
+      friday: {
+        lunch: 'CHHOLE MASALA, RICE & SALAD',
+        dinner: 'EGG CURRY, ROTI & SALAD'
+      },
+      saturday: {
+        lunch: 'KHICHDI, AALOO CHOKHA / PICKLE',
+        dinner: 'CHHOLE MASALA, PURI & SWEETS'
+      }
+    },
     isActive: true,
     features: [
       'Both Lunch & Dinner',
@@ -73,6 +103,36 @@ const defaultPlans = [
     type: 'MIX',
     menuCategory: 'classic',
     mealTypes: { lunch: true, dinner: true },
+    weeklyMenu: {
+      sunday: {
+        lunch: 'MIX-VEG, DAL, RICE & SALAD',
+        dinner: 'CHICKEN BIRYANI, SALAD & RAITA'
+      },
+      monday: {
+        lunch: 'AALOO SOYABEEN, RICE & SALAD',
+        dinner: 'SEASONAL VEG, ROTI & SALAD'
+      },
+      tuesday: {
+        lunch: 'RAJMA, RICE & RAITA',
+        dinner: 'KADAI PANEER, ROTI & HALWA'
+      },
+      wednesday: {
+        lunch: 'CHICKEN CURRY, RICE & SALAD',
+        dinner: 'DAL FRY, ROTI & SALAD'
+      },
+      thursday: {
+        lunch: 'VEGETABLE, RICE & SALAD',
+        dinner: 'MIX-VEG, ROTI & SALAD'
+      },
+      friday: {
+        lunch: 'CHHOLE MASALA, RICE & SALAD',
+        dinner: 'EGG CURRY, ROTI & SALAD'
+      },
+      saturday: {
+        lunch: 'KHICHDI, AALOO CHOKHA / PICKLE',
+        dinner: 'CHHOLE MASALA, PURI & SWEETS'
+      }
+    },
     isActive: true,
     features: [
       'Both Lunch & Dinner',
@@ -95,6 +155,36 @@ const defaultPlans = [
     type: 'MIX',
     menuCategory: 'classic',
     mealTypes: { lunch: true, dinner: true },
+    weeklyMenu: {
+      sunday: {
+        lunch: 'MIX-VEG, DAL, RICE & SALAD',
+        dinner: 'CHICKEN BIRYANI, SALAD & RAITA'
+      },
+      monday: {
+        lunch: 'AALOO SOYABEEN, RICE & SALAD',
+        dinner: 'SEASONAL VEG, ROTI & SALAD'
+      },
+      tuesday: {
+        lunch: 'RAJMA, RICE & RAITA',
+        dinner: 'KADAI PANEER, ROTI & HALWA'
+      },
+      wednesday: {
+        lunch: 'CHICKEN CURRY, RICE & SALAD',
+        dinner: 'DAL FRY, ROTI & SALAD'
+      },
+      thursday: {
+        lunch: 'VEGETABLE, RICE & SALAD',
+        dinner: 'MIX-VEG, ROTI & SALAD'
+      },
+      friday: {
+        lunch: 'CHHOLE MASALA, RICE & SALAD',
+        dinner: 'EGG CURRY, ROTI & SALAD'
+      },
+      saturday: {
+        lunch: 'KHICHDI, AALOO CHOKHA / PICKLE',
+        dinner: 'CHHOLE MASALA, PURI & SWEETS'
+      }
+    },
     isActive: true,
     features: ['Both Lunch & Dinner', 'Mix Veg & Non-Veg', 'Home delivery'],
     sortOrder: 3
@@ -105,7 +195,7 @@ const defaultPlans = [
   // ============================================
   {
     name: 'premium-veg-monthly-both',
-    displayName: 'Premium Veg Menu (Monthly)',
+    displayName: 'Premium Menu (VEG)',
     description: '30 days Pure Vegetarian premium meals',
     durationType: 'monthly',
     durationDays: 30,
@@ -115,6 +205,36 @@ const defaultPlans = [
     type: 'VEG',
     menuCategory: 'premium-veg',
     mealTypes: { lunch: true, dinner: true },
+    weeklyMenu: {
+      sunday: {
+        lunch: 'MIX-VEG, DAL, JEERA RICE, ROTI & SALAD',
+        dinner: 'VEG BIRYANI, SALAD & RAITA'
+      },
+      monday: {
+        lunch: 'AALOO SOYABEEN, DAL, FRIED RICE, ROTI & KHEER',
+        dinner: 'SEASONAL VEG, DAL, RICE, ROTI & SALAD'
+      },
+      tuesday: {
+        lunch: 'RAJMA, AALOO BHUJIYA, JEERA RICE, ROTI & RAITA',
+        dinner: 'KADAI PANEER, LACHHA PARATHA & SALAD'
+      },
+      wednesday: {
+        lunch: 'MUTAR MUSHROOM, DAL, SOYA RICE, ROTI & SALAD',
+        dinner: 'DAL FRY, ROTI & KHEER'
+      },
+      thursday: {
+        lunch: 'VEGETABLE, DAL, RICE, ROTI & SALAD',
+        dinner: 'MIX-VEG, DAL, FRIED RICE, ROTI & SALAD'
+      },
+      friday: {
+        lunch: 'PANEER MASALA, PLAIN PARATHA & HALWA',
+        dinner: 'BESAN GATTA, JEERA RICE, ROTI & SALAD'
+      },
+      saturday: {
+        lunch: 'KHICHDI, AALOO CHOKHA / PICKLE',
+        dinner: 'CHHOLE MASALA, PURI & SWEETS'
+      }
+    },
     isActive: true,
     features: [
       'Both Lunch & Dinner',
@@ -140,6 +260,36 @@ const defaultPlans = [
     type: 'VEG',
     menuCategory: 'premium-veg',
     mealTypes: { lunch: true, dinner: true },
+    weeklyMenu: {
+      sunday: {
+        lunch: 'MIX-VEG, DAL, JEERA RICE, ROTI & SALAD',
+        dinner: 'VEG BIRYANI, SALAD & RAITA'
+      },
+      monday: {
+        lunch: 'AALOO SOYABEEN, DAL, FRIED RICE, ROTI & KHEER',
+        dinner: 'SEASONAL VEG, DAL, RICE, ROTI & SALAD'
+      },
+      tuesday: {
+        lunch: 'RAJMA, AALOO BHUJIYA, JEERA RICE, ROTI & RAITA',
+        dinner: 'KADAI PANEER, LACHHA PARATHA & SALAD'
+      },
+      wednesday: {
+        lunch: 'MUTAR MUSHROOM, DAL, SOYA RICE, ROTI & SALAD',
+        dinner: 'DAL FRY, ROTI & KHEER'
+      },
+      thursday: {
+        lunch: 'VEGETABLE, DAL, RICE, ROTI & SALAD',
+        dinner: 'MIX-VEG, DAL, FRIED RICE, ROTI & SALAD'
+      },
+      friday: {
+        lunch: 'PANEER MASALA, PLAIN PARATHA & HALWA',
+        dinner: 'BESAN GATTA, JEERA RICE, ROTI & SALAD'
+      },
+      saturday: {
+        lunch: 'KHICHDI, AALOO CHOKHA / PICKLE',
+        dinner: 'CHHOLE MASALA, PURI & SWEETS'
+      }
+    },
     isActive: true,
     features: [
       'Both Lunch & Dinner',
@@ -156,7 +306,7 @@ const defaultPlans = [
   // ============================================
   {
     name: 'premium-non-veg-monthly-both',
-    displayName: 'Premium Non-Veg Menu (Monthly)',
+    displayName: 'Premium Menu (NON-VEG)',
     description: '30 days Premium non-vegetarian delights',
     durationType: 'monthly',
     durationDays: 30,
@@ -166,6 +316,36 @@ const defaultPlans = [
     type: 'NON_VEG',
     menuCategory: 'premium-non-veg',
     mealTypes: { lunch: true, dinner: true },
+    weeklyMenu: {
+      sunday: {
+        lunch: 'CHICKEN CURRY (BIHARI STYLE), JEERA RICE, ROTI & SALAD',
+        dinner: 'CHICKEN BIRYANI, RAITA & SALAD'
+      },
+      monday: {
+        lunch: 'EGG CURRY, FRIED RICE, ROTI & KHEER',
+        dinner: 'TANDOORI CHICKEN, PARATHA (PLAIN) & HALWA'
+      },
+      tuesday: {
+        lunch: 'N/A',
+        dinner: 'N/A'
+      },
+      wednesday: {
+        lunch: 'CHICKEN MASALA, DAL, SOYA RICE, ROTI & SALAD',
+        dinner: 'MURADABADI BIRYANI, CHUTNEY & KHEER'
+      },
+      thursday: {
+        lunch: 'EGG AALOO DUM, RICE, ROTI & SALAD',
+        dinner: 'CHICKEN KORMA, LACHHA PARATHA & SALAD'
+      },
+      friday: {
+        lunch: 'HYDRABADI BIRYANI, RAITA & HALWA',
+        dinner: 'EGG BHURJI, DAL, JEERA RICE, ROTI & SALAD'
+      },
+      saturday: {
+        lunch: 'KEEMA, DAL, RICE, ROTI & SALAD',
+        dinner: 'BUTTER CHICKEN, SATTU PARATHA, SWEETS'
+      }
+    },
     isActive: true,
     features: [
       'Both Lunch & Dinner',
@@ -191,6 +371,36 @@ const defaultPlans = [
     type: 'NON_VEG',
     menuCategory: 'premium-non-veg',
     mealTypes: { lunch: true, dinner: true },
+    weeklyMenu: {
+      sunday: {
+        lunch: 'CHICKEN CURRY (BIHARI STYLE), JEERA RICE, ROTI & SALAD',
+        dinner: 'CHICKEN BIRYANI, RAITA & SALAD'
+      },
+      monday: {
+        lunch: 'EGG CURRY, FRIED RICE, ROTI & KHEER',
+        dinner: 'TANDOORI CHICKEN, PARATHA (PLAIN) & HALWA'
+      },
+      tuesday: {
+        lunch: 'N/A',
+        dinner: 'N/A'
+      },
+      wednesday: {
+        lunch: 'CHICKEN MASALA, DAL, SOYA RICE, ROTI & SALAD',
+        dinner: 'MURADABADI BIRYANI, CHUTNEY & KHEER'
+      },
+      thursday: {
+        lunch: 'EGG AALOO DUM, RICE, ROTI & SALAD',
+        dinner: 'CHICKEN KORMA, LACHHA PARATHA & SALAD'
+      },
+      friday: {
+        lunch: 'HYDRABADI BIRYANI, RAITA & HALWA',
+        dinner: 'EGG BHURJI, DAL, JEERA RICE, ROTI & SALAD'
+      },
+      saturday: {
+        lunch: 'KEEMA, DAL, RICE, ROTI & SALAD',
+        dinner: 'BUTTER CHICKEN, SATTU PARATHA, SWEETS'
+      }
+    },
     isActive: true,
     features: [
       'Both Lunch & Dinner',
@@ -217,6 +427,15 @@ const defaultPlans = [
     type: 'MIX',
     menuCategory: 'classic',
     mealTypes: { lunch: true, dinner: false },
+    weeklyMenu: {
+      sunday: { lunch: 'MIX-VEG, DAL, RICE & SALAD', dinner: '' },
+      monday: { lunch: 'AALOO SOYABEEN, RICE & SALAD', dinner: '' },
+      tuesday: { lunch: 'RAJMA, RICE & RAITA', dinner: '' },
+      wednesday: { lunch: 'CHICKEN CURRY, RICE & SALAD', dinner: '' },
+      thursday: { lunch: 'VEGETABLE, RICE & SALAD', dinner: '' },
+      friday: { lunch: 'CHHOLE MASALA, RICE & SALAD', dinner: '' },
+      saturday: { lunch: 'KHICHDI, AALOO CHOKHA / PICKLE', dinner: '' }
+    },
     isActive: true,
     features: ['Lunch only', 'Mix Veg & Non-Veg', 'Best value', 'Home delivery'],
     sortOrder: 8
@@ -233,6 +452,15 @@ const defaultPlans = [
     type: 'MIX',
     menuCategory: 'classic',
     mealTypes: { lunch: true, dinner: false },
+    weeklyMenu: {
+      sunday: { lunch: 'MIX-VEG, DAL, RICE & SALAD', dinner: '' },
+      monday: { lunch: 'AALOO SOYABEEN, RICE & SALAD', dinner: '' },
+      tuesday: { lunch: 'RAJMA, RICE & RAITA', dinner: '' },
+      wednesday: { lunch: 'CHICKEN CURRY, RICE & SALAD', dinner: '' },
+      thursday: { lunch: 'VEGETABLE, RICE & SALAD', dinner: '' },
+      friday: { lunch: 'CHHOLE MASALA, RICE & SALAD', dinner: '' },
+      saturday: { lunch: 'KHICHDI, AALOO CHOKHA / PICKLE', dinner: '' }
+    },
     isActive: true,
     features: ['Lunch only', 'Mix Veg & Non-Veg', 'Home delivery'],
     sortOrder: 9
@@ -253,6 +481,15 @@ const defaultPlans = [
     type: 'MIX',
     menuCategory: 'classic',
     mealTypes: { lunch: true, dinner: true },
+    weeklyMenu: {
+      sunday: { lunch: 'MIX-VEG, DAL, RICE & SALAD', dinner: 'CHICKEN BIRYANI, SALAD & RAITA' },
+      monday: { lunch: 'AALOO SOYABEEN, RICE & SALAD', dinner: 'SEASONAL VEG, ROTI & SALAD' },
+      tuesday: { lunch: 'RAJMA, RICE & RAITA', dinner: 'KADAI PANEER, ROTI & HALWA' },
+      wednesday: { lunch: 'CHICKEN CURRY, RICE & SALAD', dinner: 'DAL FRY, ROTI & SALAD' },
+      thursday: { lunch: 'VEGETABLE, RICE & SALAD', dinner: 'MIX-VEG, ROTI & SALAD' },
+      friday: { lunch: 'CHHOLE MASALA, RICE & SALAD', dinner: 'EGG CURRY, ROTI & SALAD' },
+      saturday: { lunch: 'KHICHDI, AALOO CHOKHA / PICKLE', dinner: 'CHHOLE MASALA, PURI & SWEETS' }
+    },
     isActive: true,
     features: [
       'FREE Trial',
