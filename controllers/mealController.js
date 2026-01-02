@@ -686,15 +686,25 @@ exports.getWeeklyMenu = async (req, res) => {
 exports.getAggregatedMealOrders = async (req, res) => {
   try {
     const { date } = req.query;
-    // Default to TOMORROW if no date provided (users order for next day)
-    const targetDate = date ? moment(date).startOf('day') : moment().add(1, 'day').startOf('day');
+    
+    // Parse date in LOCAL timezone to avoid UTC midnight mismatch
+    let targetDate;
+    if (date) {
+      // Parse date string as local date (YYYY-MM-DD)
+      targetDate = moment(date, 'YYYY-MM-DD').startOf('day');
+    } else {
+      // Default to TOMORROW if no date provided (users order for next day)
+      targetDate = moment().add(1, 'day').startOf('day');
+    }
+    
     const deliveryDateStart = targetDate.toDate();
     const deliveryDateEnd = targetDate.clone().add(1, 'day').toDate();
 
     console.log('🍽️ Kitchen Aggregated Data:');
     console.log('   Query param date:', date || 'not provided (defaulting to tomorrow)');
-    console.log('   Target date:', targetDate.format('YYYY-MM-DD'));
-    console.log('   Date range:', deliveryDateStart, 'to', deliveryDateEnd);
+    console.log('   Target date (local):', targetDate.format('YYYY-MM-DD HH:mm:ss'));
+    console.log('   Date range START:', deliveryDateStart);
+    console.log('   Date range END:', deliveryDateEnd);
 
     // Get active users only
     const activeUserIds = await User.find({ 
@@ -716,19 +726,28 @@ exports.getAggregatedMealOrders = async (req, res) => {
     
     // Debug: Show first few meal orders
     if (mealOrders.length > 0) {
-      console.log('   Sample meal orders:');
+      console.log('   ✅ Sample meal orders:');
       mealOrders.slice(0, 3).forEach((order, i) => {
-        console.log(`   [${i}] ${order.user?.name} - ${order.mealType}: ${order.selectedMeal?.name}, status: ${order.status}`);
+        console.log(`   [${i}] ${order.user?.name} - ${order.mealType}: ${order.selectedMeal?.name}`);
+        console.log(`       deliveryDate: ${moment(order.deliveryDate).format('YYYY-MM-DD HH:mm:ss')}`);
       });
     } else {
-      console.log('   ⚠️ NO MEAL ORDERS FOUND! Checking database...');
+      console.log('   ⚠️ NO MEAL ORDERS FOUND! Debugging...');
       // Check if ANY meal orders exist
       const anyMeals = await MealOrder.countDocuments({});
       console.log(`   Total meal orders in DB: ${anyMeals}`);
+      
       const todayAnyUser = await MealOrder.countDocuments({
         deliveryDate: { $gte: deliveryDateStart, $lt: deliveryDateEnd }
       });
-      console.log(`   Meal orders for date (any user): ${todayAnyUser}`);
+      console.log(`   Meal orders for exact date range (any user): ${todayAnyUser}`);
+      
+      // Check sample dates in DB
+      const sampleDates = await MealOrder.find({}).limit(5).select('deliveryDate mealType').sort({ deliveryDate: -1 });
+      console.log('   Sample deliveryDates in DB:');
+      sampleDates.forEach((order, i) => {
+        console.log(`   [${i}] ${moment(order.deliveryDate).format('YYYY-MM-DD HH:mm:ss')} (${order.mealType})`);
+      });
     }
 
     // Aggregate meal counts
