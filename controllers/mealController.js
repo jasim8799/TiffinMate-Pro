@@ -756,7 +756,6 @@ exports.getAggregatedMealOrders = async (req, res) => {
     mealOrders.forEach(order => {
       const mealName = order.selectedMeal?.name || 'Not Selected';
       const mealType = order.mealType;
-      const mealItems = order.selectedMeal?.items || [];
       
       // Add to customer details
       customerDetails.push({
@@ -779,14 +778,14 @@ exports.getAggregatedMealOrders = async (req, res) => {
         totalDinnerOrders++;
       }
 
-      // Aggregate ingredients from items array
-      if (mealItems && Array.isArray(mealItems)) {
-        mealItems.forEach(item => {
-          if (item && typeof item === 'string') {
-            const normalizedItem = item.trim();
-            if (normalizedItem) {
-              ingredientCounts[normalizedItem] = (ingredientCounts[normalizedItem] || 0) + 1;
-            }
+      // Aggregate ingredients by parsing meal name string
+      // selectedMeal.name is a comma-separated string like "BUTTER CHICKEN, SATTU PARATHA, SWEETS"
+      if (mealName && mealName !== 'Not Selected') {
+        const items = mealName.split(',');
+        items.forEach(item => {
+          const ingredient = item.trim();
+          if (ingredient) {
+            ingredientCounts[ingredient] = (ingredientCounts[ingredient] || 0) + 1;
           }
         });
       }
