@@ -29,9 +29,10 @@ exports.getDashboardStats = async (req, res) => {
     });
     const pendingRequests = await AccessRequest.countDocuments({ status: 'pending' });
 
-    // Today's deliveries - exclude deleted users
-    const today = moment().startOf('day').toDate();
+    // Tomorrow's deliveries and meal orders (users select for next day)
+    // Users order meals for TOMORROW, not today
     const tomorrow = moment().add(1, 'day').startOf('day').toDate();
+    const dayAfter = moment().add(2, 'days').startOf('day').toDate();
     
     // Get active users first
     const activeUserIds = await User.find({ 
@@ -41,29 +42,37 @@ exports.getDashboardStats = async (req, res) => {
     }).distinct('_id');
     
     const todayDeliveries = await Delivery.countDocuments({
-      deliveryDate: { $gte: today, $lt: tomorrow },
+      deliveryDate: { $gte: tomorrow, $lt: dayAfter },
       user: { $in: activeUserIds }
     });
 
-    // Today's meal orders - exclude deleted users
+    // Tomorrow's meal orders - exclude deleted users
     const todayMealOrders = await MealOrder.countDocuments({
-      deliveryDate: { $gte: today, $lt: tomorrow },
+      deliveryDate: { $gte: tomorrow, $lt: dayAfter },
       user: { $in: activeUserIds }
     });
 
     console.log('📊 Dashboard Stats - Meal Orders:');
-    console.log('   Date range:', today, 'to', tomorrow);
+    console.log('   Querying for TOMORROW (users order for next day)');
+    console.log('   Date range:', tomorrow, 'to', dayAfter);
     console.log('   Active users count:', activeUserIds.length);
-    console.log('   Today meal orders count:', todayMealOrders);
+    console.log('   Tomorrow meal orders count:', todayMealOrders);
     
     // Debug: Check if ANY meal orders exist at all
     if (todayMealOrders === 0) {
       const totalMealOrders = await MealOrder.countDocuments({});
       console.log('   ⚠️ Total meal orders in DB:', totalMealOrders);
-      const anyDateOrders = await MealOrder.countDocuments({
-        deliveryDate: { $gte: today, $lt: tomorrow }
+      const tomorrowOrders = await MealOrder.countDocuments({
+        deliveryDate: { $gte: tomorrow, $lt: dayAfter }
       });
-      console.log('   ⚠️ Meal orders for date (any user):', anyDateOrders);
+      console.log('   ⚠️ Meal orders for tomorrow (any user):', tomorrowOrders);
+      
+      // Check what dates exist in the DB
+      const sampleOrders = await MealOrder.find({}).sort({ deliveryDate: -1 }).limit(5).select('deliveryDate user');
+      console.log('   ⚠️ Sample meal order dates in DB:');
+      sampleOrders.forEach(order => {
+        console.log(`      - ${moment(order.deliveryDate).format('YYYY-MM-DD')} (user: ${order.user})`);
+      });
     }
 
     // Pending payments - exclude deleted users
