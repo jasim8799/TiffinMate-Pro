@@ -812,6 +812,25 @@ exports.requestSubscription = async (req, res) => {
       });
     }
 
+    // TRIAL PLAN: Check if user has already used trial
+    if (plan.planCategory === 'trial') {
+      const previousTrial = await Subscription.findOne({
+        user: userId,
+        planCategory: 'trial'
+      });
+
+      if (previousTrial) {
+        return res.status(400).json({
+          success: false,
+          message: 'Trial can be used only once. Please choose a weekly or monthly plan.',
+          data: {
+            trialAlreadyUsed: true,
+            previousTrialId: previousTrial._id
+          }
+        });
+      }
+    }
+
     // Check for existing pending or active subscriptions
     const existingSubscription = await Subscription.findOne({
       user: userId,
@@ -1111,6 +1130,36 @@ exports.rejectSubscription = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Error rejecting subscription',
+      error: error.message
+    });
+  }
+};
+
+// @desc    Check if user has used trial plan
+// @route   GET /api/subscriptions/check-trial-usage
+// @access  Private (Customer)
+exports.checkTrialUsage = async (req, res) => {
+  try {
+    const userId = req.user._id;
+
+    // Check if user has ever had a trial subscription
+    const trialSubscription = await Subscription.findOne({
+      user: userId,
+      planCategory: 'trial'
+    });
+
+    res.status(200).json({
+      success: true,
+      data: {
+        hasUsedTrial: !!trialSubscription,
+        trialSubscriptionId: trialSubscription?._id || null
+      }
+    });
+  } catch (error) {
+    console.error('Check trial usage error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error checking trial usage',
       error: error.message
     });
   }

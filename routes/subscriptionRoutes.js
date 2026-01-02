@@ -16,7 +16,8 @@ const {
   requestSubscription,
   approveSubscription,
   rejectSubscription,
-  getPendingSubscriptions
+  getPendingSubscriptions,
+  checkTrialUsage
 } = require('../controllers/subscriptionController');
 const { protect, authorize } = require('../middleware/auth');
 
@@ -29,6 +30,7 @@ router.get('/plans-with-menus', getPlansWithMenus);
 router.post('/select', protect, authorize('customer'), selectPlan);
 router.get('/my-active', protect, getMyActiveSubscription);
 router.post('/request', protect, authorize('customer'), requestSubscription);
+router.get('/check-trial-usage', protect, authorize('customer'), checkTrialUsage);
 
 // Owner routes
 router.post('/', protect, authorize('owner'), createSubscription);
