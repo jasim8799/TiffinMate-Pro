@@ -5,6 +5,7 @@ const Payment = require('../models/Payment');
 const AccessRequest = require('../models/AccessRequest');
 const ExtraTiffin = require('../models/ExtraTiffin');
 const Pause = require('../models/Pause');
+const MealOrder = require('../models/MealOrder');
 const moment = require('moment');
 
 // @desc    Get dashboard statistics
@@ -40,6 +41,12 @@ exports.getDashboardStats = async (req, res) => {
     }).distinct('_id');
     
     const todayDeliveries = await Delivery.countDocuments({
+      deliveryDate: { $gte: today, $lt: tomorrow },
+      user: { $in: activeUserIds }
+    });
+
+    // Today's meal orders - exclude deleted users
+    const todayMealOrders = await MealOrder.countDocuments({
       deliveryDate: { $gte: today, $lt: tomorrow },
       user: { $in: activeUserIds }
     });
@@ -135,6 +142,9 @@ exports.getDashboardStats = async (req, res) => {
         },
         deliveries: {
           today: todayDeliveries
+        },
+        mealOrders: {
+          today: todayMealOrders
         },
         payments: {
           pending: pendingPayments,
