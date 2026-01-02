@@ -550,6 +550,7 @@ exports.getUserSubscriptions = async (req, res) => {
   try {
     const subscriptions = await Subscription.find({ user: req.params.userId })
       .populate('user', 'name mobile userId')
+      .populate('plan', 'name displayName price durationDays')
       .sort({ createdAt: -1 });
 
     res.status(200).json({
@@ -578,6 +579,7 @@ exports.getMyActiveSubscription = async (req, res) => {
       status: { $in: ['active', 'pending'] }
     })
       .populate('user', 'name mobile userId')
+      .populate('plan') // 🔑 Populate plan for Flutter UI
       .sort({ createdAt: -1 }); // Get most recent
 
     if (!subscription) {
@@ -623,6 +625,7 @@ exports.getAllSubscriptions = async (req, res) => {
 
     const subscriptions = await Subscription.find(filter)
       .populate('user', 'name mobile userId')
+      .populate('plan', 'name displayName price durationDays')
       .sort({ createdAt: -1 });
 
     res.status(200).json({
@@ -749,7 +752,8 @@ exports.togglePauseSubscription = async (req, res) => {
 exports.getSubscription = async (req, res) => {
   try {
     const subscription = await Subscription.findById(req.params.id)
-      .populate('user', 'name mobile userId');
+      .populate('user', 'name mobile userId')
+      .populate('plan', 'name displayName price durationDays');
 
     if (!subscription) {
       return res.status(404).json({
@@ -879,6 +883,7 @@ exports.requestSubscription = async (req, res) => {
 
     const subscription = await Subscription.create({
       user: userId,
+      plan: plan._id, // 🔑 Save plan reference
       planType: plan.menuCategory, // Map menuCategory → planType (classic/premium-veg/premium-non-veg)
       planCategory: plan.planCategory, // Copy planCategory (trial/classic/premium)
       startDate: startDate.toDate(),
@@ -938,6 +943,9 @@ exports.requestSubscription = async (req, res) => {
       planName: plan.name,
       amount: plan.totalPrice
     });
+
+    // Populate plan before returning
+    await subscription.populate('plan');
 
     res.status(201).json({
       success: true,
@@ -1055,6 +1063,9 @@ exports.approveSubscription = async (req, res) => {
       endDate: subscription.endDate,
       status: 'active'
     });
+
+    // Populate plan before returning
+    await subscription.populate('plan');
 
     res.status(200).json({
       success: true,
@@ -1174,6 +1185,7 @@ exports.getPendingSubscriptions = async (req, res) => {
       status: 'pending_approval'
     })
       .populate('user', 'name mobile email address')
+      .populate('plan', 'name displayName price durationDays')
       .sort({ createdAt: -1 });
 
     res.status(200).json({

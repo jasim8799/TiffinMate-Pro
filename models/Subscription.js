@@ -6,6 +6,10 @@ const subscriptionSchema = new mongoose.Schema({
     ref: 'User',
     required: true
   },
+  plan: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'SubscriptionPlan'
+  },
   planType: {
     type: String,
     enum: ['trial', 'classic', 'premium-veg', 'premium-non-veg'],
@@ -44,6 +48,30 @@ const subscriptionSchema = new mongoose.Schema({
   amount: {
     type: Number,
     required: true
+  },
+  paymentMode: {
+    type: String,
+    enum: ['cash', 'online'],
+    default: 'cash'
+  },
+  planDetails: {
+    planId: mongoose.Schema.Types.ObjectId,
+    planName: String,
+    planType: String
+  },
+  approvedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  },
+  approvedAt: {
+    type: Date
+  },
+  rejectedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  },
+  rejectedAt: {
+    type: Date
   },
   mealPreferences: {
     includesLunch: {
