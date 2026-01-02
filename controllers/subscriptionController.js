@@ -777,9 +777,18 @@ exports.getSubscription = async (req, res) => {
 // @access  Private (Customer)
 exports.requestSubscription = async (req, res) => {
   try {
+    // Validate JWT user
+    if (!req.user || !req.user._id) {
+      return res.status(401).json({
+        success: false,
+        message: 'Unauthorized: User authentication required'
+      });
+    }
+
     const { planId, paymentMode } = req.body;
     const userId = req.user._id;
 
+    // Validate planId
     if (!planId) {
       return res.status(400).json({
         success: false,
@@ -789,17 +798,24 @@ exports.requestSubscription = async (req, res) => {
 
     // Check if plan exists
     const plan = await SubscriptionPlan.findById(planId);
-    if (!plan || !plan.isActive) {
+    if (!plan) {
       return res.status(404).json({
         success: false,
-        message: 'Subscription plan not found or inactive'
+        message: 'Subscription plan not found'
+      });
+    }
+
+    if (!plan.isActive) {
+      return res.status(400).json({
+        success: false,
+        message: 'This subscription plan is not available'
       });
     }
 
     // Check for existing pending or active subscriptions
     const existingSubscription = await Subscription.findOne({
       user: userId,
-      status: { $in: ['pending_approval', 'active'] }
+      status: { $in: ['pending_approval', 'active', 'pending'] }
     });
 
     if (existingSubscription) {
@@ -893,7 +909,28 @@ exports.requestSubscription = async (req, res) => {
       data: subscription
     });
   } catch (error) {
-    console.error('Request subscription error:', error);
+    console.error('❌ Request subscription error:', error);
+    console.error('Error details:', {
+      message: error.message,
+      stack: error.stack,
+      name: error.name
+    });
+    
+    // Handle specific MongoDB errors
+    if (error.name === 'ValidationError') {
+      return res.status(400).json({
+        success: false,
+        message: 'Validation error: ' + error.message
+      });
+    }
+    
+    if (error.name === 'CastError') {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid plan ID format'
+      });
+    }
+
     res.status(500).json({
       success: false,
       message: 'Error creating subscription request',
