@@ -860,7 +860,8 @@ exports.requestSubscription = async (req, res) => {
 
     const subscription = await Subscription.create({
       user: userId,
-      planType: plan.durationType,
+      planType: plan.menuCategory, // Map menuCategory → planType (classic/premium-veg/premium-non-veg)
+      planCategory: plan.planCategory, // Copy planCategory (trial/classic/premium)
       startDate: startDate.toDate(),
       endDate: endDate.toDate(),
       totalDays,
