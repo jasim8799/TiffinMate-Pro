@@ -135,6 +135,13 @@ exports.selectMeal = async (req, res) => {
 
     // Calculate cutoff time (previous night 11 PM for lunch, same day 11 AM for dinner)
     const deliveryMoment = moment(deliveryDate).startOf('day');
+    
+    console.log('📅 Date handling:');
+    console.log('   Input deliveryDate:', deliveryDate);
+    console.log('   Parsed moment:', deliveryMoment.toISOString());
+    console.log('   Formatted:', deliveryMoment.format('YYYY-MM-DD'));
+    console.log('   As Date object:', deliveryMoment.toDate());
+    
     const lunchCutoff = deliveryMoment.clone().subtract(1, 'day').hour(23).minute(0).second(0);
     const dinnerCutoff = deliveryMoment.clone().hour(11).minute(0).second(0);
     const currentMoment = moment();
@@ -189,6 +196,7 @@ exports.selectMeal = async (req, res) => {
           status: 'confirmed'
         });
         console.log('✅ Created new lunch order:', newLunch._id);
+        console.log('   Saved with deliveryDate:', newLunch.deliveryDate);
       }
     }
 
@@ -224,6 +232,7 @@ exports.selectMeal = async (req, res) => {
           status: 'confirmed'
         });
         console.log('✅ Created new dinner order:', newDinner._id);
+        console.log('   Saved with deliveryDate:', newDinner.deliveryDate);
       }
     }
 
@@ -325,10 +334,34 @@ exports.getMyMealSelection = async (req, res) => {
 
     const deliveryMoment = moment(deliveryDate).startOf('day');
     
+    console.log('🔍 Fetching meals:');
+    console.log('   Input deliveryDate:', deliveryDate);
+    console.log('   Parsed moment:', deliveryMoment.toISOString());
+    console.log('   Query Date object:', deliveryMoment.toDate());
+    
+    // Also check all meal orders for this user (for debugging)
+    const allUserMeals = await MealOrder.find({ user: req.user._id }).sort({ deliveryDate: -1 }).limit(10);
+    console.log(`   Total meal orders for user: ${allUserMeals.length} (showing last 10)`);
+    allUserMeals.forEach((order, i) => {
+      console.log(`   [ALL ${i}] ${order.mealType} on ${order.deliveryDate} - ${order.selectedMeal?.name}`);
+    });
+    
     // Find meal orders for this date
+    // Use date range to handle potential timezone issues
+    const startOfDay = deliveryMoment.clone().startOf('day').toDate();
+    const endOfDay = deliveryMoment.clone().endOf('day').toDate();
+    
     const mealOrders = await MealOrder.find({
       user: req.user._id,
-      deliveryDate: deliveryMoment.toDate()
+      deliveryDate: {
+        $gte: startOfDay,
+        $lte: endOfDay
+      }
+    });
+    
+    console.log(`   Found ${mealOrders.length} meal orders for ${deliveryDate}`);
+    mealOrders.forEach((order, i) => {
+      console.log(`   [${i}] Type: ${order.mealType}, Meal: ${order.selectedMeal?.name}, Date: ${order.deliveryDate}`);
     });
 
     // Calculate cutoff times
