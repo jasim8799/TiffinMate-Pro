@@ -880,20 +880,36 @@ exports.requestSubscription = async (req, res) => {
       }
     });
 
-    // Create notification for owner
-    await AppNotification.create({
-      recipient: null, // Owner notification
-      recipientRole: 'owner',
-      type: 'subscription_request',
-      title: 'New Subscription Request',
-      message: `${req.user.name} has requested a ${plan.name} subscription`,
-      data: {
-        subscriptionId: subscription._id,
-        userId: userId,
-        userName: req.user.name,
-        planName: plan.name
+    // Find owner to send notification
+    const owner = await User.findOne({ role: 'owner' });
+    
+    if (!owner) {
+      console.warn('⚠️ No owner found to send notification');
+    } else {
+      // Create notification for owner with all required fields
+      try {
+        await AppNotification.create({
+          type: 'subscription_requested', // ✅ Valid enum value
+          title: 'New Subscription Request',
+          message: `${req.user.name} has requested a ${plan.name} subscription`,
+          relatedUser: userId, // ✅ User who made the request
+          relatedModel: 'Subscription', // ✅ Required field
+          relatedId: subscription._id, // ✅ Required field
+          priority: 'high',
+          isRead: false,
+          metadata: {
+            subscriptionId: subscription._id,
+            userId: userId,
+            userName: req.user.name,
+            planName: plan.name,
+            planPrice: plan.totalPrice
+          }
+        });
+      } catch (notificationError) {
+        console.error('⚠️ Failed to create notification:', notificationError);
+        // Don't fail the entire request if notification fails
       }
-    });
+    }
 
     // Emit socket event to owner
     socketService.emitToOwner('subscription_request', {
