@@ -160,6 +160,42 @@ exports.getDashboardStats = async (req, res) => {
 
     const totalPendingAmount = pendingAmount.length > 0 ? pendingAmount[0].totalPending : 0;
 
+    // ======================================================================
+    // ✅ SUBSCRIPTION ALERTS (REAL DATA)
+    // ======================================================================
+    console.log('🚨 [DASHBOARD] Calculating subscription alerts...');
+    
+    const todayDate = moment().startOf('day').toDate();
+    const warningDate = moment().add(3, 'days').endOf('day').toDate();
+    
+    // 1️⃣ EXPIRING SOON (within 3 days)
+    const expiringSoonCount = await Subscription.countDocuments({
+      status: 'active',
+      user: { $in: activeUserIds },
+      endDate: { $gte: todayDate, $lte: warningDate }
+    });
+    
+    // 2️⃣ EXPIRED (endDate < today)
+    const expiredCount = await Subscription.countDocuments({
+      user: { $in: activeUserIds },
+      endDate: { $lt: todayDate }
+    });
+    
+    // 3️⃣ PAUSED
+    const pausedCount = await Subscription.countDocuments({
+      status: 'paused',
+      user: { $in: activeUserIds }
+    });
+    
+    const totalAlerts = expiringSoonCount + expiredCount + pausedCount;
+    
+    console.log('🚨 [DASHBOARD] Subscription Alerts:');
+    console.log(`      - Expiring Soon (≤3 days): ${expiringSoonCount}`);
+    console.log(`      - Expired: ${expiredCount}`);
+    console.log(`      - Paused: ${pausedCount}`);
+    console.log(`      - Total Alerts: ${totalAlerts}`);
+    console.log('');
+
     // ✅ MONTHLY COLLECTION (TASK 2 & 3)
     // Calculate total subscription amounts for current month (paid + pending)
     const currentMonth = moment().month() + 1; // 1-12
@@ -272,6 +308,12 @@ exports.getDashboardStats = async (req, res) => {
           thisMonth: monthlyCollection.thisMonth,
           paidThisMonth: monthlyCollection.paid,
           pendingThisMonth: monthlyCollection.pending
+        },
+        subscriptionAlerts: {
+          expiringSoon: expiringSoonCount,
+          expired: expiredCount,
+          paused: pausedCount,
+          total: totalAlerts
         },
         accessRequests: {
           pending: pendingRequests
