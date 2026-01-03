@@ -169,6 +169,17 @@ exports.getDashboardStats = async (req, res) => {
     });
     console.log('   Payments This Month (any status):', thisMonthPaymentsCount);
     
+    // Debug: Show sample payments from this month
+    if (thisMonthPaymentsCount > 0) {
+      const samplePayments = await Payment.find({
+        createdAt: { $gte: monthStart, $lte: monthEnd }
+      }).limit(3).select('amount status createdAt user subscription');
+      console.log('   Sample Payments This Month:');
+      samplePayments.forEach(p => {
+        console.log(`      - ID: ${p._id}, Amount: ₹${p.amount}, Status: ${p.status}, Created: ${p.createdAt}`);
+      });
+    }
+    
     const monthlyPayments = await Payment.aggregate([
       {
         $match: {
