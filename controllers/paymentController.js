@@ -51,15 +51,18 @@ exports.createPayment = async (req, res) => {
       });
     }
 
-    // Create payment record
+    // Create payment record with month/year for tracking
+    const now = new Date();
     const payment = await Payment.create({
       user: req.user._id,
       subscription: subscriptionId,
       amount,
+      month: now.getMonth() + 1, // 1-12
+      year: now.getFullYear(),
       paymentMethod: paymentMethod,
       status: 'pending',
       referenceNote: referenceNote || '',
-      paymentDate: new Date()
+      paymentDate: now
     });
 
     // Create notification for owner
@@ -628,10 +631,13 @@ exports.getAllPayments = async (req, res) => {
 // @access  Private (Owner only)
 exports.getMonthlyCollectionSummary = async (req, res) => {
   try {
-    // Get current month start and end dates
+    // Get current month and year
     const now = new Date();
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+    const currentMonth = now.getMonth() + 1; // 1-12
+    const currentYear = now.getFullYear();
+
+    console.log('📊 Getting Monthly Collection Summary:');
+    console.log(`   Month/Year: ${currentMonth}/${currentYear}`);
 
     // Get active users only
     const activeUserIds = await User.find({ 
@@ -640,13 +646,13 @@ exports.getMonthlyCollectionSummary = async (req, res) => {
       deletedAt: { $exists: false }
     }).distinct('_id');
 
-    // Find all payments for current month from active users
+    console.log(`   Active Users: ${activeUserIds.length}`);
+
+    // Find all payments for current month using month/year fields
     const payments = await Payment.find({
       user: { $in: activeUserIds },
-      createdAt: {
-        $gte: startOfMonth,
-        $lte: endOfMonth
-      }
+      month: currentMonth,
+      year: currentYear
     })
       .populate('user', 'name mobile userId')
       .populate({
@@ -658,6 +664,8 @@ exports.getMonthlyCollectionSummary = async (req, res) => {
         }
       })
       .sort({ createdAt: -1 });
+
+    console.log(`   Payments Found: ${payments.length}`);
 
     // Calculate summary
     let totalAmount = 0;
@@ -686,9 +694,15 @@ exports.getMonthlyCollectionSummary = async (req, res) => {
         status: payment.status,
         paymentMethod: payment.paymentMethod,
         createdAt: payment.createdAt,
+        month: payment.month,
+        year: payment.year,
         referenceNote: payment.referenceNote || ''
       };
     });
+
+    console.log(`   Total Amount: ₹${totalAmount}`);
+    console.log(`   Paid: ₹${paidAmount}`);
+    console.log(`   Pending: ₹${pendingAmount}`);
 
     res.status(200).json({
       success: true,

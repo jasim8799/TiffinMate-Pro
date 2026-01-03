@@ -156,34 +156,41 @@ exports.getDashboardStats = async (req, res) => {
 
     // ✅ MONTHLY COLLECTION (TASK 2 & 3)
     // Calculate total subscription amounts for current month (paid + pending)
+    const currentMonth = moment().month() + 1; // 1-12
+    const currentYear = moment().year();
+    
     console.log('💰 Calculating Monthly Collection:');
-    console.log('   Month Range:', monthStart, 'to', monthEnd);
+    console.log('   Current Month/Year:', `${currentMonth}/${currentYear}`);
     console.log('   Active Users:', activeUserIds.length);
     
     // Debug: Check all payments in DB
     const allPaymentsCount = await Payment.countDocuments({});
     console.log('   Total Payments in DB:', allPaymentsCount);
     
+    // Use month/year fields for reliable filtering
     const thisMonthPaymentsCount = await Payment.countDocuments({
-      createdAt: { $gte: monthStart, $lte: monthEnd }
+      month: currentMonth,
+      year: currentYear
     });
-    console.log('   Payments This Month (any status):', thisMonthPaymentsCount);
+    console.log('   Payments This Month (month/year filter):', thisMonthPaymentsCount);
     
     // Debug: Show sample payments from this month
     if (thisMonthPaymentsCount > 0) {
       const samplePayments = await Payment.find({
-        createdAt: { $gte: monthStart, $lte: monthEnd }
-      }).limit(3).select('amount status createdAt user subscription');
+        month: currentMonth,
+        year: currentYear
+      }).limit(3).select('amount status month year createdAt user subscription');
       console.log('   Sample Payments This Month:');
       samplePayments.forEach(p => {
-        console.log(`      - ID: ${p._id}, Amount: ₹${p.amount}, Status: ${p.status}, Created: ${p.createdAt}`);
+        console.log(`      - ID: ${p._id}, Amount: ₹${p.amount}, Status: ${p.status}, Month/Year: ${p.month}/${p.year}`);
       });
     }
     
     const monthlyPayments = await Payment.aggregate([
       {
         $match: {
-          createdAt: { $gte: monthStart, $lte: monthEnd },
+          month: currentMonth,
+          year: currentYear,
           status: { $in: ['paid', 'verified', 'pending'] },
           user: { $in: activeUserIds }
         }

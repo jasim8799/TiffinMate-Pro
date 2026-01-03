@@ -1058,24 +1058,24 @@ exports.approveSubscription = async (req, res) => {
     console.log('');
     
     // Check if payment already exists for this subscription in current month
-    const monthStart = moment().startOf('month').toDate();
-    const monthEnd = moment().endOf('month').toDate();
+    const now = new Date();
+    const currentMonth = now.getMonth() + 1; // JavaScript months are 0-11, we need 1-12
+    const currentYear = now.getFullYear();
     
-    console.log(`Checking for existing payment (${monthStart} to ${monthEnd})...`);
+    console.log(`Checking for existing payment (Month: ${currentMonth}, Year: ${currentYear})...`);
     
     const existingPayment = await Payment.findOne({
       subscription: subscription._id,
       user: subscription.user._id,
-      createdAt: {
-        $gte: monthStart,
-        $lte: monthEnd
-      }
+      month: currentMonth,
+      year: currentYear
     });
 
     if (existingPayment) {
       console.log(`ℹ️ Payment already exists: ${existingPayment._id}`);
       console.log(`   Amount: ₹${existingPayment.amount}`);
       console.log(`   Status: ${existingPayment.status}`);
+      console.log(`   Month: ${existingPayment.month}/${existingPayment.year}`);
       console.log(`   Created: ${existingPayment.createdAt}`);
       console.log('=== PAYMENT AUTO-CREATION END ===\n');
     } else {
@@ -1103,23 +1103,24 @@ exports.approveSubscription = async (req, res) => {
       } else {
         try {
           // Create payment record automatically with status = pending
-          const now = new Date();
           const payment = await Payment.create({
             user: subscription.user._id,
             subscription: subscription._id,
             amount: paymentAmount,
+            month: currentMonth,
+            year: currentYear,
             paymentMethod: subscription.paymentMode === 'online' ? 'upi' : 'cash',
             status: 'pending',
             paymentStatus: 'pending', // Also set legacy field
             paymentType: 'subscription',
             referenceNote: `Payment for ${subscription.planType} subscription (auto-created on approval)`,
-            paymentDate: now,
-            createdAt: now // Explicitly set for monthly filtering
+            paymentDate: now
           });
 
           console.log('✅ PAYMENT CREATED SUCCESSFULLY!');
           console.log(`   Payment ID: ${payment._id}`);
           console.log(`   Amount: ₹${payment.amount}`);
+          console.log(`   Month/Year: ${payment.month}/${payment.year}`);
           console.log(`   Status: ${payment.status}`);
           console.log(`   Payment Method: ${payment.paymentMethod}`);
           console.log(`   Created At: ${payment.createdAt}`);
@@ -1132,12 +1133,13 @@ exports.approveSubscription = async (req, res) => {
           if (verifyPayment) {
             console.log('✅ Payment verified in database');
             console.log(`   Verify Amount: ₹${verifyPayment.amount}`);
+            console.log(`   Verify Month/Year: ${verifyPayment.month}/${verifyPayment.year}`);
             console.log(`   Verify Status: ${verifyPayment.status}`);
             console.log(`   Verify Created At: ${verifyPayment.createdAt}`);
             
-            // Double-check it's in current month
-            const isCurrentMonth = moment(verifyPayment.createdAt).isSame(moment(), 'month');
-            console.log(`   Is Current Month: ${isCurrentMonth ? '✅ YES' : '❌ NO'}`);
+            // Double-check month/year match
+            const monthYearMatch = (verifyPayment.month === currentMonth && verifyPayment.year === currentYear);
+            console.log(`   Month/Year Match: ${monthYearMatch ? '✅ YES' : '❌ NO'}`);
           } else {
             console.error('⚠️ WARNING: Payment not found after creation!');
           }

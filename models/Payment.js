@@ -14,6 +14,19 @@ const paymentSchema = new mongoose.Schema({
     type: Number,
     required: true
   },
+  // Month and Year for reliable monthly tracking
+  month: {
+    type: Number,
+    required: true,
+    min: 1,
+    max: 12
+  },
+  year: {
+    type: Number,
+    required: true,
+    min: 2020,
+    max: 2100
+  },
   paymentMethod: {
     type: String,
     enum: ['upi', 'cash', 'other'],
