@@ -47,36 +47,23 @@ exports.getDashboardStats = async (req, res) => {
       user: { $in: activeUserIds }
     });
 
-    // ✅ TODAY ORDER STATUS - Orders PLACED today (activity view)
-    // This shows fresh orders created today, not delivery schedule
+    // ✅ TODAY MEALS TO COOK - Same as Kitchen (cooking schedule, not activity)
+    // This shows ALL meals to cook today (user-selected + defaults)
+    // MATCHES Kitchen exactly - no filtering
     const todayStart = moment().startOf('day').toDate();
     const todayEnd = moment().endOf('day').toDate();
 
-    console.log('📊 Dashboard Stats - TODAY Order Status (Activity View):');
-    console.log('   Querying for orders PLACED today (createdAt = today)');
+    console.log('📊 Dashboard Stats - TODAY Meals to Cook:');
+    console.log('   Querying for meals to cook TODAY (deliveryDate = today)');
     console.log('   Date range:', todayStart, 'to', todayEnd);
-    console.log('   🔍 FILTERING: Excluding system-generated default meals');
+    console.log('   ✅ INCLUDING: ALL meals (user-selected + defaults)');
+    console.log('   ✅ MATCHES: Kitchen cooking schedule exactly');
     
-    // Get meal orders PLACED today by USERS ONLY (exclude system-generated defaults)
-    // System-generated meals (from Kitchen readiness or cron) must NOT inflate activity metrics
+    // Get ALL meal orders for TODAY (same query as Kitchen uses)
+    // Include user-selected AND system-generated defaults
     const todayMealOrders = await MealOrder.find({
-      createdAt: { $gte: todayStart, $lte: todayEnd },
-      user: { $in: activeUserIds },
-      // Exclude system-generated default meals
-      $and: [
-        {
-          $or: [
-            { 'selectedMeal.isDefault': { $exists: false } },
-            { 'selectedMeal.isDefault': false }
-          ]
-        },
-        {
-          $or: [
-            { createdBy: { $exists: false } },
-            { createdBy: { $nin: ['system', 'system-kitchen'] } }
-          ]
-        }
-      ]
+      deliveryDate: { $gte: todayStart, $lt: todayEnd },
+      user: { $in: activeUserIds }
     });
 
     let lunchCount = 0;
@@ -90,38 +77,36 @@ exports.getDashboardStats = async (req, res) => {
       }
     });
 
-    const totalTodayOrders = lunchCount + dinnerCount;
+    const totalTodayMeals = lunchCount + dinnerCount;
 
-    // Debug: Get breakdown of all orders vs user-selected
-    const allTodayOrders = await MealOrder.find({
-      createdAt: { $gte: todayStart, $lte: todayEnd },
-      user: { $in: activeUserIds }
-    });
-    const systemGenerated = allTodayOrders.filter(o => 
+    // Debug: Get breakdown of user-selected vs defaults
+    const userSelected = todayMealOrders.filter(o => 
+      o.selectedMeal?.isDefault === false || 
+      (!o.createdBy || (o.createdBy !== 'system' && o.createdBy !== 'system-kitchen'))
+    );
+    const systemGenerated = todayMealOrders.filter(o => 
       o.selectedMeal?.isDefault === true || 
       o.createdBy === 'system' || 
       o.createdBy === 'system-kitchen'
     );
 
-    console.log('   ✅ User Activity Breakdown (USER-SELECTED ONLY):');
+    console.log('   ✅ Meals to Cook Today (COMPLETE LIST):');
     console.log(`      - Lunch: ${lunchCount}`);
     console.log(`      - Dinner: ${dinnerCount}`);
-    console.log(`      - Total: ${totalTodayOrders}`);
+    console.log(`      - Total: ${totalTodayMeals}`);
     console.log('');
-    console.log('   📊 Filtering Summary:');
-    console.log(`      - Total orders created today: ${allTodayOrders.length}`);
-    console.log(`      - User-selected (counted): ${totalTodayOrders}`);
-    console.log(`      - System-generated (filtered out): ${systemGenerated.length}`);
+    console.log('   📊 Breakdown by Source:');
+    console.log(`      - User-selected: ${userSelected.length}`);
+    console.log(`      - Default meals: ${systemGenerated.length}`);
+    console.log(`      - Total: ${todayMealOrders.length}`);
     console.log('');
-    console.log('   ℹ️  IMPORTANT: This is ACTIVITY VIEW (user actions today)');
-    console.log('   ℹ️  System-generated defaults are NOT counted in activity');
-    console.log('   ℹ️  These orders are FOR delivery tomorrow/future');
-    console.log('   ℹ️  Kitchen shows COOKING VIEW (orders to cook tomorrow)');
-    console.log('   ℹ️  Dashboard ≠ Kitchen counts is EXPECTED and CORRECT');
+    console.log('   ℹ️  IMPORTANT: This is COOKING VIEW (meals to cook today)');
+    console.log('   ℹ️  Includes ALL meals: user-selected + defaults');
+    console.log('   ℹ️  Dashboard = Kitchen counts (IDENTICAL)');
     console.log('');
     
     // Debug: Check if ANY meal orders exist at all
-    if (totalTodayOrders === 0) {
+    if (totalTodayMeals === 0) {
       const totalMealOrders = await MealOrder.countDocuments({});
       console.log('   ⚠️ Total meal orders in DB:', totalMealOrders);
       
@@ -310,12 +295,12 @@ exports.getDashboardStats = async (req, res) => {
           today: todayDeliveries
         },
         mealOrders: {
-          today: totalTodayOrders // Keep for backward compatibility
+          today: totalTodayMeals // Meals to cook today (matches Kitchen)
         },
         todayOrders: {
           lunch: lunchCount,
           dinner: dinnerCount,
-          total: totalTodayOrders
+          total: totalTodayMeals
         },
         payments: {
           pending: pendingPayments,
