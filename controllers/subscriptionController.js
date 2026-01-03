@@ -1043,39 +1043,65 @@ exports.approveSubscription = async (req, res) => {
       await user.save();
     }
 
-    // ✅ AUTO-CREATE PAYMENT RECORD (TASK 4)
-    // Check if payment already exists for this subscription
+    // ✅ AUTO-CREATE PAYMENT RECORD (CRITICAL FOR MONTHLY COLLECTION)
+    // Check if payment already exists for this subscription in current month
+    const currentMonth = moment().month();
+    const currentYear = moment().year();
+    
     const existingPayment = await Payment.findOne({
       subscription: subscription._id,
-      user: subscription.user._id
+      user: subscription.user._id,
+      createdAt: {
+        $gte: moment().startOf('month').toDate(),
+        $lte: moment().endOf('month').toDate()
+      }
     });
 
     if (!existingPayment) {
+      // Get the subscription amount
+      const paymentAmount = subscription.amount || 0;
+      
+      console.log(`💰 Creating payment for subscription ${subscription._id}`);
+      console.log(`   Amount: ₹${paymentAmount}`);
+      console.log(`   User: ${subscription.user._id}`);
+      console.log(`   Plan Type: ${subscription.planType}`);
+      
+      if (paymentAmount <= 0) {
+        console.error('⚠️ WARNING: Subscription amount is 0 or invalid!');
+      }
+
       // Create payment record automatically with status = pending
       const payment = await Payment.create({
         user: subscription.user._id,
         subscription: subscription._id,
-        amount: subscription.amount,
+        amount: paymentAmount,
         paymentMethod: subscription.paymentMode === 'online' ? 'upi' : 'cash',
         status: 'pending',
+        paymentStatus: 'pending', // Also set legacy field
+        paymentType: 'subscription',
         referenceNote: `Auto-created for ${subscription.planType} subscription`,
-        paymentDate: new Date()
+        paymentDate: new Date(),
+        createdAt: new Date() // Explicitly set createdAt for monthly filter
       });
 
-      console.log(`✅ Payment auto-created: ${payment._id} for subscription ${subscription._id}`);
+      console.log(`✅ Payment auto-created successfully!`);
+      console.log(`   Payment ID: ${payment._id}`);
+      console.log(`   Status: ${payment.status}`);
+      console.log(`   Amount: ₹${payment.amount}`);
+      console.log(`   Created At: ${payment.createdAt}`);
 
       // Create notification for owner about pending payment
       try {
         await AppNotification.createNotification({
           type: 'payment_created',
           title: 'Payment Pending',
-          message: `${user?.name || 'Customer'} has pending payment of ₹${subscription.amount}`,
+          message: `${user?.name || 'Customer'} has pending payment of ₹${paymentAmount}`,
           relatedUser: subscription.user._id,
           relatedModel: 'Payment',
           relatedId: payment._id,
           priority: 'high',
           metadata: {
-            amount: subscription.amount,
+            amount: paymentAmount,
             subscriptionId: subscription._id,
             paymentMethod: payment.paymentMethod
           }
@@ -1083,6 +1109,8 @@ exports.approveSubscription = async (req, res) => {
       } catch (notifError) {
         console.error('Failed to create payment notification:', notifError);
       }
+    } else {
+      console.log(`ℹ️ Payment already exists for this subscription this month: ${existingPayment._id}`);
     }
 
     // Create notification for customer

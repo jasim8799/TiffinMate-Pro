@@ -156,6 +156,19 @@ exports.getDashboardStats = async (req, res) => {
 
     // ✅ MONTHLY COLLECTION (TASK 2 & 3)
     // Calculate total subscription amounts for current month (paid + pending)
+    console.log('💰 Calculating Monthly Collection:');
+    console.log('   Month Range:', monthStart, 'to', monthEnd);
+    console.log('   Active Users:', activeUserIds.length);
+    
+    // Debug: Check all payments in DB
+    const allPaymentsCount = await Payment.countDocuments({});
+    console.log('   Total Payments in DB:', allPaymentsCount);
+    
+    const thisMonthPaymentsCount = await Payment.countDocuments({
+      createdAt: { $gte: monthStart, $lte: monthEnd }
+    });
+    console.log('   Payments This Month (any status):', thisMonthPaymentsCount);
+    
     const monthlyPayments = await Payment.aggregate([
       {
         $match: {
@@ -168,6 +181,7 @@ exports.getDashboardStats = async (req, res) => {
         $group: {
           _id: null,
           totalAmount: { $sum: '$amount' },
+          count: { $sum: 1 },
           paidAmount: { 
             $sum: { 
               $cond: [
@@ -199,6 +213,12 @@ exports.getDashboardStats = async (req, res) => {
       paid: 0,
       pending: 0
     };
+    
+    console.log('   Monthly Collection Result:');
+    console.log('   - Payments Found:', monthlyPayments.length > 0 ? monthlyPayments[0].count : 0);
+    console.log('   - Total This Month: ₹' + monthlyCollection.thisMonth);
+    console.log('   - Paid: ₹' + monthlyCollection.paid);
+    console.log('   - Pending: ₹' + monthlyCollection.pending);
 
     res.status(200).json({
       success: true,
