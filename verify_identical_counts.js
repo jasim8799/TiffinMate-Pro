@@ -40,16 +40,12 @@ async function verifyIdenticalCounts() {
     console.log('━'.repeat(70));
     
     const result = await getTodayMeals(activeUserIds, MealOrder);
-    const { mealOrders, lunchCount, dinnerCount, total, breakdown, duplicates } = result;
+    const { mealOrders, lunchCount, dinnerCount, totalUsers, duplicates } = result;
     
-    console.log('\n✅ CANONICAL RESULT:');
-    console.log(`   Total Documents: ${total}`);
+    console.log('\n✅ TODAY MEALS RESULT:');
+    console.log(`   Total Orders:    ${totalUsers}`);
     console.log(`   Lunch Orders:    ${lunchCount}`);
     console.log(`   Dinner Orders:   ${dinnerCount}`);
-    console.log('');
-    console.log('📊 Breakdown by Source:');
-    console.log(`   User-selected:     ${breakdown.userSelected}`);
-    console.log(`   System-generated:  ${breakdown.systemGenerated}`);
     
     // ======================================================================
     // CHECK FOR DUPLICATES (CRITICAL BUG)
@@ -76,15 +72,15 @@ async function verifyIdenticalCounts() {
     console.log('━'.repeat(70));
     
     // Both should use the same canonical query
-    console.log('\n📊 Dashboard Count (from canonical query):');
+    console.log('\n📊 Dashboard Count (from TODAY query):');
     console.log(`   Lunch:  ${lunchCount}`);
     console.log(`   Dinner: ${dinnerCount}`);
-    console.log(`   Total:  ${total}`);
+    console.log(`   Total:  ${totalUsers}`);
     
-    console.log('\n🍽️  Kitchen Count (from canonical query):');
+    console.log('\n🍽️  Kitchen Count (from TODAY query):');
     console.log(`   Lunch:  ${lunchCount}`);
     console.log(`   Dinner: ${dinnerCount}`);
-    console.log(`   Total:  ${total}`);
+    console.log(`   Total:  ${totalUsers}`);
     
     console.log('\n' + '━'.repeat(70));
     console.log('✅ RESULT: Dashboard = Kitchen (IDENTICAL)');
@@ -153,9 +149,9 @@ async function verifyIdenticalCounts() {
     console.log('\n' + '='.repeat(70));
     console.log('📊 FINAL SUMMARY');
     console.log('='.repeat(70));
-    console.log(`\n✅ Single Source of Truth:     ${total} meals`);
-    console.log(`✅ Dashboard will show:        Lunch=${lunchCount}, Dinner=${dinnerCount}, Total=${total}`);
-    console.log(`✅ Kitchen will show:          Lunch=${lunchCount}, Dinner=${dinnerCount}, Total=${total}`);
+    console.log(`\n✅ TODAY ONLY Query:          ${totalUsers} meals`);
+    console.log(`✅ Dashboard will show:       Lunch=${lunchCount}, Dinner=${dinnerCount}, Total=${totalUsers}`);
+    console.log(`✅ Kitchen will show:         Lunch=${lunchCount}, Dinner=${dinnerCount}, Total=${totalUsers}`);
     console.log(`\n${duplicates.length === 0 ? '✅' : '❌'} Duplicates: ${duplicates.length}`);
     console.log(`${multipleOrdersDetected ? '❌' : '✅'} Multiple orders check: ${multipleOrdersDetected ? 'FAILED' : 'PASSED'}`);
     console.log('\n' + '='.repeat(70));

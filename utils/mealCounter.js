@@ -11,35 +11,43 @@ const moment = require('moment');
  */
 
 /**
- * Get meals to cook for a specific date
- * This is the ONE TRUE QUERY that defines "meals to cook"
+ * Get meals to cook TODAY ONLY
+ * ❌ NO TOMORROW
+ * ❌ NO FUTURE
+ * ❌ NO PAST
+ * ✅ TODAY ONLY
  * 
- * @param {Date} date - The delivery date to query for
  * @param {Array} activeUserIds - Array of active user IDs to include
- * @returns {Promise<Object>} { mealOrders, lunchCount, dinnerCount, total, breakdown }
+ * @param {Object} MealOrder - Mongoose model
+ * @returns {Promise<Object>} { mealOrders, lunchCount, dinnerCount, totalUsers }
  */
-async function getMealsForDate(date, activeUserIds, MealOrder) {
-  const startOfDay = moment(date).startOf('day').toDate();
-  const endOfDay = moment(date).clone().add(1, 'day').toDate();
+async function getTodayMeals(activeUserIds, MealOrder) {
+  // Get TODAY date range
+  const today = moment();
+  const start = moment(today).startOf('day').toDate();
+  const end = moment(today).endOf('day').toDate();
 
-  console.log('🔍 [CANONICAL QUERY] Getting meals for date:', {
-    date: moment(date).format('YYYY-MM-DD'),
-    startOfDay,
-    endOfDay,
+  console.log('🍳 COOKING TODAY ONLY - Query Range:', {
+    date: today.format('YYYY-MM-DD (dddd)'),
+    start,
+    end,
     activeUsers: activeUserIds.length
   });
 
-  // THE ONLY VALID QUERY - No variations allowed
-  const mealOrders = await MealOrder.find({
-    deliveryDate: { $gte: startOfDay, $lt: endOfDay },
+  // STRICT TODAY-ONLY QUERY
+  // ❌ NO tomorrow logic
+  // ❌ NO createdAt
+  // ✅ deliveryDate ONLY
+  const mealsToday = await MealOrder.find({
+    deliveryDate: { $gte: start, $lte: end },
     user: { $in: activeUserIds }
-  }).populate('user', 'name mobile userId');
+  }).populate('user', 'name mobile userId address');
 
   // Count by meal type
   let lunchCount = 0;
   let dinnerCount = 0;
 
-  mealOrders.forEach(order => {
+  mealsToday.forEach(order => {
     if (order.mealType === 'lunch') {
       lunchCount++;
     } else if (order.mealType === 'dinner') {
@@ -47,30 +55,21 @@ async function getMealsForDate(date, activeUserIds, MealOrder) {
     }
   });
 
-  const total = mealOrders.length;
+  const totalUsers = mealsToday.length;
 
-  // Breakdown by source (for debugging)
-  const userSelected = mealOrders.filter(o => 
-    o.selectedMeal?.isDefault === false || 
-    (!o.createdBy || (o.createdBy !== 'system' && o.createdBy !== 'system-kitchen'))
-  );
-  const systemGenerated = mealOrders.filter(o => 
-    o.selectedMeal?.isDefault === true || 
-    o.createdBy === 'system' || 
-    o.createdBy === 'system-kitchen'
-  );
+  // Safety log
+  console.log('🍳 COOKING TODAY ONLY', {
+    date: today.format('YYYY-MM-DD'),
+    users: totalUsers,
+    lunch: lunchCount,
+    dinner: dinnerCount
+  });
 
-  const breakdown = {
-    userSelected: userSelected.length,
-    systemGenerated: systemGenerated.length,
-    total: total
-  };
-
-  // Check for duplicates (critical bug detection)
+  // Check for duplicates
   const userMealKeys = new Map();
   const duplicates = [];
 
-  mealOrders.forEach(order => {
+  mealsToday.forEach(order => {
     const key = `${order.user._id}_${order.mealType}`;
     if (userMealKeys.has(key)) {
       duplicates.push({
@@ -84,58 +83,18 @@ async function getMealsForDate(date, activeUserIds, MealOrder) {
   });
 
   if (duplicates.length > 0) {
-    console.error('❌ [CRITICAL] DUPLICATE MEAL ORDERS DETECTED:', {
-      count: duplicates.length,
-      duplicates: duplicates.slice(0, 5) // Show first 5
-    });
+    console.error('❌ DUPLICATE MEALS DETECTED:', duplicates.length);
   }
 
-  // LOG EXACTLY (for debugging)
-  console.log('✅ [CANONICAL QUERY] Results:', {
-    date: moment(date).format('YYYY-MM-DD'),
-    totalDocuments: total,
-    lunchCount,
-    dinnerCount,
-    userSelected: userSelected.length,
-    systemGenerated: systemGenerated.length,
-    duplicates: duplicates.length,
-    users: mealOrders.map(m => ({ 
-      user: m.user.name, 
-      type: m.mealType,
-      isDefault: m.selectedMeal?.isDefault || false 
-    }))
-  });
-
   return {
-    mealOrders,
+    mealOrders: mealsToday,
     lunchCount,
     dinnerCount,
-    total,
-    breakdown,
+    totalUsers,
     duplicates
   };
 }
 
-/**
- * Get meals to cook TODAY
- * Dashboard and Kitchen should BOTH use this for "today's meals"
- */
-async function getTodayMeals(activeUserIds, MealOrder) {
-  const today = moment().startOf('day').toDate();
-  return getMealsForDate(today, activeUserIds, MealOrder);
-}
-
-/**
- * Get meals to cook TOMORROW
- * Use this ONLY when explicitly showing "tomorrow's" data
- */
-async function getTomorrowMeals(activeUserIds, MealOrder) {
-  const tomorrow = moment().add(1, 'day').startOf('day').toDate();
-  return getMealsForDate(tomorrow, activeUserIds, MealOrder);
-}
-
 module.exports = {
-  getMealsForDate,
-  getTodayMeals,
-  getTomorrowMeals
+  getTodayMeals
 };

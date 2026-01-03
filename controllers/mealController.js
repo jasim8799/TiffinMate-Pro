@@ -892,28 +892,27 @@ exports.getAggregatedMealOrders = async (req, res) => {
     }).distinct('_id');
 
     // ======================================================================
-    // ✅ USE SINGLE SOURCE OF TRUTH
+    // ✅ TODAY MEALS TO COOK - STRICT TODAY ONLY
     // ======================================================================
-    console.log('🍽️ [KITCHEN] Getting today\'s meals using CANONICAL query...');
+    console.log('🍽️ [KITCHEN] Getting TODAY meals ONLY...');
     
     const todayMealsData = await getTodayMeals(activeUserIds, MealOrder);
-    const { mealOrders, lunchCount, dinnerCount, total, breakdown, duplicates } = todayMealsData;
+    const { mealOrders, lunchCount, dinnerCount, totalUsers, duplicates } = todayMealsData;
 
-    console.log('🍽️ [KITCHEN] Today\'s Meals (CANONICAL):');
+    console.log('🍽️ [KITCHEN] Meals to Cook TODAY:');
     console.log(`      - Lunch: ${lunchCount}`);
     console.log(`      - Dinner: ${dinnerCount}`);
-    console.log(`      - Total: ${total}`);
-    console.log('   📊 Breakdown:');
-    console.log(`      - User-selected: ${breakdown.userSelected}`);
-    console.log(`      - System-generated: ${breakdown.systemGenerated}`);
+    console.log(`      - Total: ${totalUsers}`);
     
     if (duplicates.length > 0) {
       console.error(`   ❌ WARNING: ${duplicates.length} duplicate meal orders detected!`);
     }
     
-    console.log('   ✅ Kitchen using SINGLE SOURCE OF TRUTH');
+    console.log('   ✅ Kitchen: TODAY ONLY (no tomorrow)');
     console.log('   ✅ Should MATCH Dashboard exactly');
     console.log('');
+    
+    const total = totalUsers;
     
     // Debug: Show first few meal orders
     if (mealOrders.length > 0) {

@@ -49,27 +49,24 @@ exports.getDashboardStats = async (req, res) => {
     });
 
     // ======================================================================
-    // ✅ TODAY MEALS TO COOK - Using SINGLE SOURCE OF TRUTH
+    // ✅ TODAY MEALS TO COOK - STRICT TODAY ONLY
     // ======================================================================
-    console.log('📊 [DASHBOARD] Getting today\'s meals using canonical query...');
+    console.log('📊 [DASHBOARD] Getting TODAY meals ONLY...');
     
     const todayMealsData = await getTodayMeals(activeUserIds, MealOrder);
     
-    const { lunchCount, dinnerCount, total: totalTodayMeals, breakdown, duplicates } = todayMealsData;
+    const { lunchCount, dinnerCount, totalUsers: totalTodayMeals, duplicates } = todayMealsData;
 
-    console.log('📊 [DASHBOARD] Today\'s Meals (CANONICAL):');
+    console.log('📊 [DASHBOARD] Meals to Cook TODAY:');
     console.log(`      - Lunch: ${lunchCount}`);
     console.log(`      - Dinner: ${dinnerCount}`);
     console.log(`      - Total: ${totalTodayMeals}`);
-    console.log('   📊 Breakdown:');
-    console.log(`      - User-selected: ${breakdown.userSelected}`);
-    console.log(`      - System-generated: ${breakdown.systemGenerated}`);
     
     if (duplicates.length > 0) {
       console.error(`   ❌ WARNING: ${duplicates.length} duplicate meal orders detected!`);
     }
     
-    console.log('   ✅ Dashboard using SINGLE SOURCE OF TRUTH');
+    console.log('   ✅ Dashboard: TODAY ONLY (no tomorrow)');
     console.log('');
     
     // Debug: Check if ANY meal orders exist at all
