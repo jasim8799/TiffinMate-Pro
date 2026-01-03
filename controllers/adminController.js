@@ -154,6 +154,52 @@ exports.getDashboardStats = async (req, res) => {
 
     const totalPendingAmount = pendingAmount.length > 0 ? pendingAmount[0].totalPending : 0;
 
+    // ✅ MONTHLY COLLECTION (TASK 2 & 3)
+    // Calculate total subscription amounts for current month (paid + pending)
+    const monthlyPayments = await Payment.aggregate([
+      {
+        $match: {
+          createdAt: { $gte: monthStart, $lte: monthEnd },
+          status: { $in: ['paid', 'verified', 'pending'] },
+          user: { $in: activeUserIds }
+        }
+      },
+      {
+        $group: {
+          _id: null,
+          totalAmount: { $sum: '$amount' },
+          paidAmount: { 
+            $sum: { 
+              $cond: [
+                { $in: ['$status', ['paid', 'verified']] }, 
+                '$amount', 
+                0
+              ] 
+            } 
+          },
+          pendingAmount: { 
+            $sum: { 
+              $cond: [
+                { $eq: ['$status', 'pending'] }, 
+                '$amount', 
+                0
+              ] 
+            } 
+          }
+        }
+      }
+    ]);
+
+    const monthlyCollection = monthlyPayments.length > 0 ? {
+      thisMonth: monthlyPayments[0].totalAmount,
+      paid: monthlyPayments[0].paidAmount,
+      pending: monthlyPayments[0].pendingAmount
+    } : {
+      thisMonth: 0,
+      paid: 0,
+      pending: 0
+    };
+
     res.status(200).json({
       success: true,
       data: {
@@ -173,7 +219,10 @@ exports.getDashboardStats = async (req, res) => {
         },
         payments: {
           pending: pendingPayments,
-          overdue: overduePayments
+          overdue: overduePayments,
+          thisMonth: monthlyCollection.thisMonth,
+          paidThisMonth: monthlyCollection.paid,
+          pendingThisMonth: monthlyCollection.pending
         },
         accessRequests: {
           pending: pendingRequests

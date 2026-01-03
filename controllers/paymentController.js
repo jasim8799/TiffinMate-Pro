@@ -602,9 +602,6 @@ exports.getAllPayments = async (req, res) => {
       filter.user = { $in: activeUserIds };
     }
 
-    // Also filter by isActive payments
-    filter.isActive = true;
-
     const payments = await Payment.find(filter)
       .populate('user', 'name mobile userId')
       .populate('subscription', 'planType startDate endDate')
@@ -621,6 +618,96 @@ exports.getAllPayments = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Error fetching payments',
+      error: error.message
+    });
+  }
+};
+
+// @desc    Get monthly collection summary for owner
+// @route   GET /api/payments/owner/monthly-summary
+// @access  Private (Owner only)
+exports.getMonthlyCollectionSummary = async (req, res) => {
+  try {
+    // Get current month start and end dates
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+
+    // Get active users only
+    const activeUserIds = await User.find({ 
+      role: 'customer', 
+      isActive: true,
+      deletedAt: { $exists: false }
+    }).distinct('_id');
+
+    // Find all payments for current month from active users
+    const payments = await Payment.find({
+      user: { $in: activeUserIds },
+      createdAt: {
+        $gte: startOfMonth,
+        $lte: endOfMonth
+      }
+    })
+      .populate('user', 'name mobile userId')
+      .populate({
+        path: 'subscription',
+        select: 'planType startDate endDate',
+        populate: {
+          path: 'plan',
+          select: 'name'
+        }
+      })
+      .sort({ createdAt: -1 });
+
+    // Calculate summary
+    let totalAmount = 0;
+    let paidAmount = 0;
+    let pendingAmount = 0;
+    let pendingCount = 0;
+
+    const paymentsList = payments.map(payment => {
+      const amount = payment.amount || 0;
+      totalAmount += amount;
+
+      if (payment.status === 'paid' || payment.status === 'verified') {
+        paidAmount += amount;
+      } else if (payment.status === 'pending') {
+        pendingAmount += amount;
+        pendingCount++;
+      }
+
+      return {
+        _id: payment._id,
+        userName: payment.user?.name || 'Unknown',
+        userMobile: payment.user?.mobile || '',
+        userId: payment.user?.userId || '',
+        planName: payment.subscription?.plan?.name || payment.subscription?.planType || 'N/A',
+        amount: amount,
+        status: payment.status,
+        paymentMethod: payment.paymentMethod,
+        createdAt: payment.createdAt,
+        referenceNote: payment.referenceNote || ''
+      };
+    });
+
+    res.status(200).json({
+      success: true,
+      data: {
+        month: moment(now).format('MMMM YYYY'),
+        totalAmount,
+        paidAmount,
+        pendingAmount,
+        pendingCount,
+        paidCount: payments.filter(p => p.status === 'paid' || p.status === 'verified').length,
+        totalCount: payments.length,
+        payments: paymentsList
+      }
+    });
+  } catch (error) {
+    console.error('Get monthly collection summary error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching monthly collection summary',
       error: error.message
     });
   }

@@ -3,6 +3,7 @@ const SubscriptionPlan = require('../models/SubscriptionPlan');
 const WeeklyMenu = require('../models/WeeklyMenu');
 const User = require('../models/User');
 const AppNotification = require('../models/AppNotification');
+const Payment = require('../models/Payment');
 const moment = require('moment');
 const socketService = require('../services/socketService');
 
@@ -1040,6 +1041,48 @@ exports.approveSubscription = async (req, res) => {
     if (user) {
       user.isActive = true;
       await user.save();
+    }
+
+    // ✅ AUTO-CREATE PAYMENT RECORD (TASK 4)
+    // Check if payment already exists for this subscription
+    const existingPayment = await Payment.findOne({
+      subscription: subscription._id,
+      user: subscription.user._id
+    });
+
+    if (!existingPayment) {
+      // Create payment record automatically with status = pending
+      const payment = await Payment.create({
+        user: subscription.user._id,
+        subscription: subscription._id,
+        amount: subscription.amount,
+        paymentMethod: subscription.paymentMode === 'online' ? 'upi' : 'cash',
+        status: 'pending',
+        referenceNote: `Auto-created for ${subscription.planType} subscription`,
+        paymentDate: new Date()
+      });
+
+      console.log(`✅ Payment auto-created: ${payment._id} for subscription ${subscription._id}`);
+
+      // Create notification for owner about pending payment
+      try {
+        await AppNotification.createNotification({
+          type: 'payment_created',
+          title: 'Payment Pending',
+          message: `${user?.name || 'Customer'} has pending payment of ₹${subscription.amount}`,
+          relatedUser: subscription.user._id,
+          relatedModel: 'Payment',
+          relatedId: payment._id,
+          priority: 'high',
+          metadata: {
+            amount: subscription.amount,
+            subscriptionId: subscription._id,
+            paymentMethod: payment.paymentMethod
+          }
+        });
+      } catch (notifError) {
+        console.error('Failed to create payment notification:', notifError);
+      }
     }
 
     // Create notification for customer

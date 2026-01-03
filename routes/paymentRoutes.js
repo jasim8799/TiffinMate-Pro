@@ -10,7 +10,8 @@ const {
   verifyPayment,
   receivePayment,
   getAllPayments,
-  getPayment
+  getPayment,
+  getMonthlyCollectionSummary
 } = require('../controllers/paymentController');
 const { protect, authorize } = require('../middleware/auth');
 const upload = require('../middleware/upload');
@@ -24,6 +25,7 @@ router.get('/my', protect, authorize('customer'), getMyPayments);
 // ====================================
 // OWNER ROUTES
 // ====================================
+router.get('/owner/monthly-summary', protect, authorize('owner'), getMonthlyCollectionSummary);
 router.get('/pending', protect, authorize('owner'), getPendingPayments);
 router.put('/:id/verify', protect, authorize('owner'), verifyPayment);
 router.put('/:id/receive', protect, authorize('owner'), receivePayment);
