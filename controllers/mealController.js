@@ -925,13 +925,14 @@ exports.getAggregatedMealOrders = async (req, res) => {
     const dinnerCounts = {};
     const customerDetails = [];
     const ingredientCounts = {};
+    const userMealDetails = []; // ✅ NEW: User-wise meal details for kitchen table
 
     mealOrders.forEach(order => {
       const mealName = order.selectedMeal?.name || 'Not Selected';
       const mealType = order.mealType;
       const isDefaultMeal = order.selectedMeal?.isDefault || false;
       
-      // Add to customer details
+      // Add to customer details (existing)
       customerDetails.push({
         customerId: order.user.userId,
         customerName: order.user.name,
@@ -943,6 +944,25 @@ exports.getAggregatedMealOrders = async (req, res) => {
         orderId: order._id
       });
 
+      // ✅ NEW: Extract ingredients from menu items
+      let ingredients = [];
+      if (mealName && mealName !== 'Not Selected') {
+        // Split menu by comma and extract ingredients
+        const items = mealName.split(',').map(item => item.trim()).filter(item => item);
+        ingredients = items;
+      }
+
+      // ✅ NEW: Add user-wise meal detail for kitchen table
+      userMealDetails.push({
+        userName: order.user.name || 'Unknown User',
+        userId: order.user.userId,
+        mealType: mealType.charAt(0).toUpperCase() + mealType.slice(1), // Capitalize
+        menu: mealName,
+        ingredients: ingredients,
+        source: isDefaultMeal ? 'DEFAULT' : 'USER',
+        orderId: order._id
+      });
+
       // Aggregate counts by meal name
       if (mealType === 'lunch') {
         lunchCounts[mealName] = (lunchCounts[mealName] || 0) + 1;
@@ -951,15 +971,11 @@ exports.getAggregatedMealOrders = async (req, res) => {
       }
 
       // Aggregate ingredients
-      if (mealName && mealName !== 'Not Selected') {
-        const items = mealName.split(',');
-        items.forEach(item => {
-          const ingredient = item.trim();
-          if (ingredient) {
-            ingredientCounts[ingredient] = (ingredientCounts[ingredient] || 0) + 1;
-          }
-        });
-      }
+      ingredients.forEach(ingredient => {
+        if (ingredient) {
+          ingredientCounts[ingredient] = (ingredientCounts[ingredient] || 0) + 1;
+        }
+      });
     });
 
     // Convert to arrays for easier display
@@ -990,6 +1006,7 @@ exports.getAggregatedMealOrders = async (req, res) => {
 
     console.log('   📊 Order Summary:', orderSummary);
     console.log('   🥘 Ingredient Summary:', ingredientSummary);
+    console.log('   👥 User Meal Details count:', userMealDetails.length);
 
     res.status(200).json({
       success: true,
@@ -1002,7 +1019,8 @@ exports.getAggregatedMealOrders = async (req, res) => {
         totalDinner: dinnerCount,
         customerDetails,
         orderSummary,
-        ingredientSummary
+        ingredientSummary,
+        userMealDetails // ✅ NEW: User-wise meal details for kitchen table
       }
     });
   } catch (error) {
