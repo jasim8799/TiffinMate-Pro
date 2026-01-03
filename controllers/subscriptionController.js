@@ -392,8 +392,65 @@ exports.updateSubscriptionStatus = async (req, res) => {
       newStatus: subscription.status
     });
 
-    // Create AppNotification when subscription is activated
+    // ✅ AUTO-CREATE PAYMENT WHEN STATUS = ACTIVE
     if (status === 'active') {
+      console.log('\n🔥 STATUS CHANGED TO ACTIVE - CREATING PAYMENT');
+      console.log(`Subscription ID: ${subscription._id}`);
+      console.log(`Subscription Amount: ₹${subscription.amount}`);
+      console.log(`User: ${subscription.user._id}`);
+      
+      try {
+        const now = new Date();
+        const currentMonth = now.getMonth() + 1;
+        const currentYear = now.getFullYear();
+
+        // Check if payment already exists
+        const existingPayment = await Payment.findOne({
+          subscription: subscription._id,
+          user: subscription.user._id,
+          month: currentMonth,
+          year: currentYear
+        });
+
+        if (existingPayment) {
+          console.log('ℹ️  Payment already exists:', existingPayment._id);
+        } else {
+          const paymentAmount = subscription.amount || 0;
+          
+          if (paymentAmount <= 0) {
+            console.error('❌ CRITICAL: Subscription amount is 0 or invalid!');
+            console.error(`   Subscription ID: ${subscription._id}`);
+            console.error(`   Plan Type: ${subscription.planType}`);
+            console.error(`   Amount: ${subscription.amount}`);
+          } else {
+            // Create payment
+            const payment = await Payment.create({
+              user: subscription.user._id,
+              subscription: subscription._id,
+              amount: paymentAmount,
+              month: currentMonth,
+              year: currentYear,
+              paymentMethod: subscription.paymentMode === 'online' ? 'upi' : 'cash',
+              status: 'pending',
+              paymentStatus: 'pending',
+              paymentType: 'subscription',
+              referenceNote: `Payment for ${subscription.planType} subscription (auto-created on status change)`,
+              paymentDate: now
+            });
+
+            console.log('✅ PAYMENT CREATED SUCCESSFULLY!');
+            console.log(`   Payment ID: ${payment._id}`);
+            console.log(`   Amount: ₹${payment.amount}`);
+            console.log(`   Month/Year: ${payment.month}/${payment.year}`);
+            console.log(`   Status: ${payment.status}`);
+          }
+        }
+      } catch (paymentError) {
+        console.error('❌ Failed to create payment:', paymentError);
+        // Don't fail the subscription activation
+      }
+
+      // Create AppNotification when subscription is activated
       try {
         await AppNotification.createNotification({
           type: 'subscription_activated',
@@ -992,16 +1049,28 @@ exports.approveSubscription = async (req, res) => {
     const { id } = req.params;
     const { startDate } = req.body; // Optional: owner can change start date
 
+    console.log('\n🔥🔥🔥 APPROVE SUBSCRIPTION CALLED 🔥🔥🔥');
+    console.log(`   Subscription ID: ${id}`);
+    console.log(`   User: ${req.user.name} (${req.user._id})`);
+
     const subscription = await Subscription.findById(id).populate('user');
     
     if (!subscription) {
+      console.error('❌ Subscription not found:', id);
       return res.status(404).json({
         success: false,
         message: 'Subscription not found'
       });
     }
 
+    console.log('📋 Subscription Details BEFORE approval:');
+    console.log(`   Status: ${subscription.status}`);
+    console.log(`   Plan Type: ${subscription.planType}`);
+    console.log(`   Amount: ₹${subscription.amount}`);
+    console.log(`   User: ${subscription.user?.name}`);
+
     if (subscription.status !== 'pending_approval') {
+      console.error(`❌ Cannot approve - status is: ${subscription.status}`);
       return res.status(400).json({
         success: false,
         message: `Cannot approve subscription with status: ${subscription.status}`
@@ -1034,13 +1103,19 @@ exports.approveSubscription = async (req, res) => {
     subscription.status = 'active';
     subscription.approvedBy = req.user._id;
     subscription.approvedAt = new Date();
+    
+    console.log('\n🔥 SAVING SUBSCRIPTION WITH STATUS = ACTIVE');
     await subscription.save();
+    console.log('✅ Subscription saved successfully');
+    console.log(`   New Status: ${subscription.status}`);
+    console.log(`   Amount after save: ₹${subscription.amount}`);
 
     // Enable user account
     const user = await User.findById(subscription.user._id);
     if (user) {
       user.isActive = true;
       await user.save();
+      console.log(`✅ User ${user.name} activated`);
     }
 
     // ✅ AUTO-CREATE PAYMENT RECORD (CRITICAL FOR MONTHLY COLLECTION)
