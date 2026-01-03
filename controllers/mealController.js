@@ -719,11 +719,22 @@ exports.getAggregatedMealOrders = async (req, res) => {
     console.log('   Active users count:', activeUserIds.length);
     console.log('   Found meal orders:', mealOrders.length);
     
+    // Debug: Count default vs user-selected meals
+    const defaultMealsCount = mealOrders.filter(o => o.selectedMeal?.isDefault === true).length;
+    const userSelectedCount = mealOrders.filter(o => o.selectedMeal?.isDefault === false).length;
+    const noSelectionCount = mealOrders.filter(o => !o.selectedMeal?.name || o.selectedMeal?.name === 'Not Selected').length;
+    
+    console.log('   📊 Meal Breakdown:');
+    console.log(`      - Default meals: ${defaultMealsCount}`);
+    console.log(`      - User-selected meals: ${userSelectedCount}`);
+    console.log(`      - No selection: ${noSelectionCount}`);
+    
     // Debug: Show first few meal orders
     if (mealOrders.length > 0) {
       console.log('   ✅ Sample meal orders:');
-      mealOrders.slice(0, 3).forEach((order, i) => {
-        console.log(`   [${i}] ${order.user?.name} - ${order.mealType}: ${order.selectedMeal?.name}`);
+      mealOrders.slice(0, 5).forEach((order, i) => {
+        const isDefaultFlag = order.selectedMeal?.isDefault ? '🔵 DEFAULT' : '🟢 USER-SELECTED';
+        console.log(`   [${i}] ${isDefaultFlag} | ${order.user?.name} - ${order.mealType}: ${order.selectedMeal?.name}`);
         console.log(`       deliveryDate: ${moment(order.deliveryDate).format('YYYY-MM-DD HH:mm:ss')}`);
       });
     } else {
@@ -756,6 +767,7 @@ exports.getAggregatedMealOrders = async (req, res) => {
     mealOrders.forEach(order => {
       const mealName = order.selectedMeal?.name || 'Not Selected';
       const mealType = order.mealType;
+      const isDefaultMeal = order.selectedMeal?.isDefault || false;
       
       // Add to customer details
       customerDetails.push({
@@ -765,11 +777,11 @@ exports.getAggregatedMealOrders = async (req, res) => {
         address: order.user.address,
         mealType: mealType,
         meal: mealName,
-        isDefault: order.selectedMeal?.isDefault || false,
+        isDefault: isDefaultMeal,
         orderId: order._id
       });
 
-      // Aggregate counts
+      // Aggregate counts (include both default and user-selected)
       if (mealType === 'lunch') {
         lunchCounts[mealName] = (lunchCounts[mealName] || 0) + 1;
         totalLunchOrders++;
