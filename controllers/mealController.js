@@ -11,13 +11,13 @@ const User = require('../models/User');
 const { getTodayMeals } = require('../utils/mealCounter');
 
 // =========================================================
-// HELPER: Ensure default meals exist for all active subscriptions
-// This is called "on-demand" when Kitchen is opened
-// Ensures Kitchen ALWAYS shows complete cooking list
+// HELPER: Ensure default meals exist (IDEMPOTENT)
+// Uses findOneAndUpdate with upsert - safe to call multiple times
+// NO DUPLICATES - guaranteed by unique index + upsert pattern
 // =========================================================
 const ensureDefaultMealsExist = async (deliveryDate, mealType = null) => {
   try {
-    console.log('🔧 [KITCHEN READINESS] Ensuring default meals exist...');
+    console.log('🔧 [KITCHEN READINESS] Ensuring default meals exist (IDEMPOTENT)...');
     console.log('   Delivery Date:', moment(deliveryDate).format('YYYY-MM-DD'));
     console.log('   Meal Type:', mealType || 'BOTH (lunch + dinner)');
 
@@ -30,80 +30,77 @@ const ensureDefaultMealsExist = async (deliveryDate, mealType = null) => {
 
     console.log('   Active subscriptions:', activeSubscriptions.length);
 
-    // Get existing meal orders for this date
-    const existingOrdersQuery = {
-      deliveryDate: deliveryDate
-    };
-    if (mealType) {
-      existingOrdersQuery.mealType = mealType;
-    }
-    
-    const existingOrders = await MealOrder.find(existingOrdersQuery);
-    const existingOrdersMap = new Map();
-    
-    existingOrders.forEach(order => {
-      const key = `${order.user}_${order.mealType}`;
-      existingOrdersMap.set(key, true);
-    });
-
-    console.log('   Existing meal orders:', existingOrders.length);
-
     // Determine which meal types to check
     const mealTypes = mealType ? [mealType] : ['lunch', 'dinner'];
     
-    let createdCount = 0;
-    const defaultMealsToCreate = [];
+    let upsertedCount = 0;
 
-    // Check each subscription and meal type
+    // ========================================
+    // IDEMPOTENT UPSERT PATTERN
+    // ========================================
+    // Uses findOneAndUpdate with upsert: true
+    // If document exists: does nothing ($setOnInsert won't run)
+    // If not exists: creates it
+    // Thread-safe, no duplicates (protected by unique index)
     for (const subscription of activeSubscriptions) {
       for (const type of mealTypes) {
-        const orderKey = `${subscription.user._id}_${type}`;
+        const defaultMeal = getDefaultMealForSubscription(subscription, deliveryDate, type);
         
-        // If order doesn't exist, prepare to create default
-        if (!existingOrdersMap.has(orderKey)) {
-          const defaultMeal = getDefaultMealForSubscription(subscription, deliveryDate, type);
-          
-          // Calculate cutoff time
-          const deliveryMoment = moment(deliveryDate);
-          const cutoffTime = type === 'lunch'
-            ? deliveryMoment.clone().subtract(1, 'day').hour(23).minute(0).second(0)
-            : deliveryMoment.clone().hour(11).minute(0).second(0);
+        // Calculate cutoff time
+        const deliveryMoment = moment(deliveryDate);
+        const cutoffTime = type === 'lunch'
+          ? deliveryMoment.clone().subtract(1, 'day').hour(23).minute(0).second(0)
+          : deliveryMoment.clone().hour(11).minute(0).second(0);
 
-          defaultMealsToCreate.push({
-            user: subscription.user._id,
-            subscription: subscription._id,
-            orderDate: new Date(),
-            deliveryDate: deliveryDate,
-            mealType: type,
-            selectedMeal: {
-              name: defaultMeal,
-              items: [],
-              isDefault: true
+        // ========================================
+        // CRITICAL: UPSERT (not create/insertMany)
+        // ========================================
+        // This ONLY inserts if document doesn't exist
+        // Multiple calls = safe, no duplicates
+        try {
+          const result = await MealOrder.findOneAndUpdate(
+            {
+              user: subscription.user._id,
+              deliveryDate: deliveryDate,
+              mealType: type
             },
-            cutoffTime: cutoffTime.toDate(),
-            isAfterCutoff: false, // Not locked yet - user can still override
-            status: 'confirmed',
-            createdBy: 'system-kitchen'
-          });
+            {
+              $setOnInsert: {
+                subscription: subscription._id,
+                orderDate: new Date(),
+                selectedMeal: {
+                  name: defaultMeal,
+                  items: [],
+                  isDefault: true
+                },
+                cutoffTime: cutoffTime.toDate(),
+                isAfterCutoff: false,
+                status: 'confirmed',
+                createdBy: 'system-kitchen'
+              }
+            },
+            {
+              upsert: true,
+              new: true,
+              setDefaultsOnInsert: true
+            }
+          );
+          
+          upsertedCount++;
+        } catch (error) {
+          // Duplicate key error from unique index - expected, ignore
+          if (error.code === 11000) {
+            console.log(`   ℹ️  Meal already exists: ${subscription.user.name} - ${type} (OK)`);
+          } else {
+            throw error;
+          }
         }
       }
     }
 
-    // Bulk create default meals
-    if (defaultMealsToCreate.length > 0) {
-      await MealOrder.insertMany(defaultMealsToCreate);
-      createdCount = defaultMealsToCreate.length;
-      
-      console.log(`   ✅ Created ${createdCount} default meals on-demand`);
-      defaultMealsToCreate.forEach((meal, i) => {
-        console.log(`   [${i + 1}] ${meal.user} - ${meal.mealType}: ${meal.selectedMeal.name}`);
-      });
-    } else {
-      console.log('   ℹ️  No default meals needed - all subscriptions have orders');
-    }
-
+    console.log(`   ✅ Ensured ${upsertedCount} default meal orders exist (idempotent)`);
     console.log('   ✅ Kitchen readiness check complete');
-    return createdCount;
+    return upsertedCount;
   } catch (error) {
     console.error('❌ Error ensuring default meals:', error);
     throw error;

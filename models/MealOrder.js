@@ -53,8 +53,17 @@ const mealOrderSchema = new mongoose.Schema({
 });
 
 // Index for efficient querying
-mealOrderSchema.index({ user: 1, deliveryDate: 1 });
 mealOrderSchema.index({ deliveryDate: 1, status: 1 });
+
+// ========================================
+// CRITICAL: UNIQUE COMPOUND INDEX
+// ========================================
+// This prevents duplicate MealOrders for the same user + date + mealType
+// Enforces: ONE MealOrder per (user + deliveryDate + mealType)
+mealOrderSchema.index(
+  { user: 1, deliveryDate: 1, mealType: 1 },
+  { unique: true, name: 'unique_user_date_mealtype' }
+);
 
 // Method to check if order is after cutoff
 mealOrderSchema.methods.checkCutoff = function() {

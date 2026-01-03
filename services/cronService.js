@@ -284,25 +284,45 @@ class CronService {
             ? deliveryMoment.clone().subtract(1, 'day').hour(23).minute(0).second(0)
             : deliveryMoment.clone().hour(11).minute(0).second(0);
 
-          // Create default meal order
-          await MealOrder.create({
-            user: subscription.user._id,
-            subscription: subscription._id,
-            orderDate: new Date(),
-            deliveryDate: deliveryDate,
-            mealType: mealType,
-            selectedMeal: {
-              name: defaultMealName,
-              items: [],
-              isDefault: true
-            },
-            cutoffTime: cutoffTime.toDate(),
-            isAfterCutoff: true,
-            status: 'confirmed'
-          });
+          // ========================================
+          // IDEMPOTENT: Use findOneAndUpdate with upsert
+          // ========================================
+          // Prevents duplicates even if cron runs multiple times
+          try {
+            await MealOrder.findOneAndUpdate(
+              {
+                user: subscription.user._id,
+                deliveryDate: deliveryDate,
+                mealType: mealType
+              },
+              {
+                $setOnInsert: {
+                  subscription: subscription._id,
+                  orderDate: new Date(),
+                  selectedMeal: {
+                    name: defaultMealName,
+                    items: [],
+                    isDefault: true
+                  },
+                  cutoffTime: cutoffTime.toDate(),
+                  isAfterCutoff: true,
+                  status: 'confirmed'
+                }
+              },
+              {
+                upsert: true,
+                new: true
+              }
+            );
 
-          assignedCount++;
-          logger.info(`Assigned default ${mealType} for user ${subscription.user.name}: ${defaultMealName}`);
+            assignedCount++;
+            logger.info(`Assigned default ${mealType} for user ${subscription.user.name}: ${defaultMealName}`);
+          } catch (err) {
+            // Ignore duplicate key errors (11000)
+            if (err.code !== 11000) {
+              logger.error(`Failed to assign default meal for user ${subscription.user._id}`, err);
+            }
+          }
         } catch (err) {
           logger.error(`Failed to assign default meal for user ${subscription.user._id}`, err);
         }
