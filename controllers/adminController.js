@@ -6,6 +6,7 @@ const AccessRequest = require('../models/AccessRequest');
 const ExtraTiffin = require('../models/ExtraTiffin');
 const Pause = require('../models/Pause');
 const MealOrder = require('../models/MealOrder');
+const Lead = require('../models/Lead');
 const moment = require('moment');
 const { getTodayMeals } = require('../utils/mealCounter');
 
@@ -280,6 +281,19 @@ exports.getDashboardStats = async (req, res) => {
     console.log('   - Paid: ₹' + monthlyCollection.paid);
     console.log('   - Pending: ₹' + monthlyCollection.pending);
 
+    // ======================================================================
+    // ✅ SERVICE LEADS (REAL DATA)
+    // ======================================================================
+    console.log('📞 [DASHBOARD] Calculating service leads...');
+    
+    const totalLeads = await Lead.countDocuments({});
+    const newLeads = await Lead.countDocuments({ status: 'new' });
+    
+    console.log('📞 [DASHBOARD] Service Leads:');
+    console.log(`      - Total Leads: ${totalLeads}`);
+    console.log(`      - New Leads: ${newLeads}`);
+    console.log('');
+
     res.status(200).json({
       success: true,
       data: {
@@ -314,6 +328,10 @@ exports.getDashboardStats = async (req, res) => {
           expired: expiredCount,
           paused: pausedCount,
           total: totalAlerts
+        },
+        serviceLeads: {
+          total: totalLeads,
+          new: newLeads
         },
         accessRequests: {
           pending: pendingRequests

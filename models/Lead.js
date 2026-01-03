@@ -12,18 +12,16 @@ const leadSchema = new mongoose.Schema({
     trim: true,
     match: [/^[0-9]{10}$/, 'Please provide a valid 10-digit phone number']
   },
+  // Location is OPTIONAL (for out-of-service area leads)
   location: {
     latitude: {
-      type: Number,
-      required: true
+      type: Number
     },
     longitude: {
-      type: Number,
-      required: true
+      type: Number
     },
     distance: {
       type: Number,
-      required: true,
       comment: 'Distance from restaurant in km'
     },
     address: {
@@ -31,9 +29,27 @@ const leadSchema = new mongoose.Schema({
       default: ''
     }
   },
+  // General inquiry fields
+  area: {
+    type: String,
+    trim: true,
+    default: '',
+    comment: 'General area/locality for non-location leads'
+  },
+  message: {
+    type: String,
+    default: '',
+    comment: 'Customer message or inquiry'
+  },
+  source: {
+    type: String,
+    enum: ['app', 'referral', 'walk-in', 'location', 'other'],
+    default: 'app',
+    comment: 'How the lead was generated'
+  },
   status: {
     type: String,
-    enum: ['new', 'contacted', 'converted', 'not-interested'],
+    enum: ['new', 'contacted', 'converted', 'not-interested', 'closed'],
     default: 'new'
   },
   notificationSent: {

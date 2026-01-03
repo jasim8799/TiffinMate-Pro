@@ -2,18 +2,18 @@ const Lead = require('../models/Lead');
 const axios = require('axios');
 const { createNotification } = require('./notificationController');
 
-// @desc    Submit lead from out-of-service area
+// @desc    Submit lead from out-of-service area OR general inquiry
 // @route   POST /api/leads
 // @access  Public
 exports.submitLead = async (req, res) => {
   try {
-    const { name, phone, latitude, longitude, distance, address } = req.body;
+    const { name, phone, latitude, longitude, distance, address, area, message, source } = req.body;
 
     // Validate required fields
-    if (!name || !phone || !latitude || !longitude || !distance) {
+    if (!name || !phone) {
       return res.status(400).json({
         success: false,
-        message: 'Please provide all required fields'
+        message: 'Please provide name and phone number'
       });
     }
 
@@ -27,44 +27,63 @@ exports.submitLead = async (req, res) => {
       });
     }
 
-    // Create new lead
-    const lead = await Lead.create({
+    // Prepare lead data
+    const leadData = {
       name,
       phone,
-      location: {
+      source: source || 'app'
+    };
+
+    // Add optional fields
+    if (area) leadData.area = area;
+    if (message) leadData.message = message;
+
+    // Add location if provided (for out-of-service area leads)
+    if (latitude && longitude && distance !== undefined) {
+      leadData.location = {
         latitude,
         longitude,
         distance,
         address: address || ''
-      }
-    });
+      };
+    }
 
-    // Send WhatsApp notification to owner
-    try {
-      await sendWhatsAppNotification(lead);
-      lead.notificationSent = true;
-      await lead.save();
-    } catch (whatsappError) {
-      console.error('WhatsApp notification failed:', whatsappError.message);
-      // Don't fail the request if WhatsApp fails
+    // Create new lead
+    const lead = await Lead.create(leadData);
+
+    // Send WhatsApp notification to owner only if location-based
+    if (latitude && longitude && distance !== undefined) {
+      try {
+        await sendWhatsAppNotification(lead);
+        lead.notificationSent = true;
+        await lead.save();
+      } catch (whatsappError) {
+        console.error('WhatsApp notification failed:', whatsappError.message);
+        // Don't fail the request if WhatsApp fails
+      }
     }
 
     // Create in-app notification for owner
+    const notificationMessage = latitude && longitude 
+      ? `New lead from ${name} - ${distance.toFixed(1)} km away`
+      : `New service inquiry from ${name}${area ? ` in ${area}` : ''}`;
+    
     await createNotification(
       'NEW_LEAD',
-      `New lead from ${name} - ${distance.toFixed(1)} km away`,
+      notificationMessage,
       lead._id,
       'Lead',
       {
         name: name,
         phone: phone,
-        distance: distance
+        area: area || '',
+        distance: distance || 0
       }
     );
 
     res.status(201).json({
       success: true,
-      message: 'Thank you! We will contact you when service reaches your area.',
+      message: 'Thank you! We will contact you soon.',
       data: lead
     });
   } catch (error) {
