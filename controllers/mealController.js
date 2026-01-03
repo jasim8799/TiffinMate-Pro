@@ -9,6 +9,181 @@ const moment = require('moment');
 const { createNotification } = require('./notificationController');
 const User = require('../models/User');
 
+// =========================================================
+// HELPER: Ensure default meals exist for all active subscriptions
+// This is called "on-demand" when Kitchen is opened
+// Ensures Kitchen ALWAYS shows complete cooking list
+// =========================================================
+const ensureDefaultMealsExist = async (deliveryDate, mealType = null) => {
+  try {
+    console.log('🔧 [KITCHEN READINESS] Ensuring default meals exist...');
+    console.log('   Delivery Date:', moment(deliveryDate).format('YYYY-MM-DD'));
+    console.log('   Meal Type:', mealType || 'BOTH (lunch + dinner)');
+
+    // Get all active subscriptions for this date
+    const activeSubscriptions = await Subscription.find({
+      status: 'active',
+      startDate: { $lte: deliveryDate },
+      endDate: { $gte: deliveryDate }
+    }).populate('user');
+
+    console.log('   Active subscriptions:', activeSubscriptions.length);
+
+    // Get existing meal orders for this date
+    const existingOrdersQuery = {
+      deliveryDate: deliveryDate
+    };
+    if (mealType) {
+      existingOrdersQuery.mealType = mealType;
+    }
+    
+    const existingOrders = await MealOrder.find(existingOrdersQuery);
+    const existingOrdersMap = new Map();
+    
+    existingOrders.forEach(order => {
+      const key = `${order.user}_${order.mealType}`;
+      existingOrdersMap.set(key, true);
+    });
+
+    console.log('   Existing meal orders:', existingOrders.length);
+
+    // Determine which meal types to check
+    const mealTypes = mealType ? [mealType] : ['lunch', 'dinner'];
+    
+    let createdCount = 0;
+    const defaultMealsToCreate = [];
+
+    // Check each subscription and meal type
+    for (const subscription of activeSubscriptions) {
+      for (const type of mealTypes) {
+        const orderKey = `${subscription.user._id}_${type}`;
+        
+        // If order doesn't exist, prepare to create default
+        if (!existingOrdersMap.has(orderKey)) {
+          const defaultMeal = getDefaultMealForSubscription(subscription, deliveryDate, type);
+          
+          // Calculate cutoff time
+          const deliveryMoment = moment(deliveryDate);
+          const cutoffTime = type === 'lunch'
+            ? deliveryMoment.clone().subtract(1, 'day').hour(23).minute(0).second(0)
+            : deliveryMoment.clone().hour(11).minute(0).second(0);
+
+          defaultMealsToCreate.push({
+            user: subscription.user._id,
+            subscription: subscription._id,
+            orderDate: new Date(),
+            deliveryDate: deliveryDate,
+            mealType: type,
+            selectedMeal: {
+              name: defaultMeal,
+              items: [],
+              isDefault: true
+            },
+            cutoffTime: cutoffTime.toDate(),
+            isAfterCutoff: false, // Not locked yet - user can still override
+            status: 'confirmed',
+            createdBy: 'system-kitchen'
+          });
+        }
+      }
+    }
+
+    // Bulk create default meals
+    if (defaultMealsToCreate.length > 0) {
+      await MealOrder.insertMany(defaultMealsToCreate);
+      createdCount = defaultMealsToCreate.length;
+      
+      console.log(`   ✅ Created ${createdCount} default meals on-demand`);
+      defaultMealsToCreate.forEach((meal, i) => {
+        console.log(`   [${i + 1}] ${meal.user} - ${meal.mealType}: ${meal.selectedMeal.name}`);
+      });
+    } else {
+      console.log('   ℹ️  No default meals needed - all subscriptions have orders');
+    }
+
+    console.log('   ✅ Kitchen readiness check complete');
+    return createdCount;
+  } catch (error) {
+    console.error('❌ Error ensuring default meals:', error);
+    throw error;
+  }
+};
+
+// Helper function to get default meal based on subscription plan and day
+const getDefaultMealForSubscription = (subscription, deliveryDate, mealType) => {
+  const dayOfWeek = moment(deliveryDate).day();
+  const planType = subscription.planType || 'classic';
+
+  const mealsByDay = {
+    'premium-veg': {
+      lunch: [
+        'MIX-VEG, DAL, JEERA RICE, ROTI & SALAD', // Sunday
+        'AALOO SOYABEEN, DAL, FRIED RICE, ROTI & KHEER', // Monday
+        'RAJMA, AALOO BHUJIYA, JEERA RICE, ROTI & RAITA', // Tuesday
+        'MUTAR MUSHROOM, DAL, SOYA RICE, ROTI & SALAD', // Wednesday
+        'VEGITABLE, DAL, RICE, ROTI & SALAD', // Thursday
+        'PANEER MASALA, PLAIN PARATHA & HALWA', // Friday
+        'KHICHDI, AALOO CHOKHA / PICKLE' // Saturday
+      ],
+      dinner: [
+        'VEG BIRYANI, SALAD & RAITA', // Sunday
+        'SEASONAL VEG, DAL, RICE, ROTI & SALAD', // Monday
+        'KADAI PANEER, LACHHA PARATHA & SALAD', // Tuesday
+        'DAL FRY, ROTI & KHEER', // Wednesday
+        'MIX-VEG, DAL, FRIED RICE, ROTI & SALAD', // Thursday
+        'BESAN GATTA, JEERA RICE, ROTI & SALAD', // Friday
+        'CHHOLE MASALA, PURI & SWEETS' // Saturday
+      ]
+    },
+    'premium-non-veg': {
+      lunch: [
+        'CHICKEN CURRY (BIHARI STYLE), JEERA RICE, ROTI & SALAD', // Sunday
+        'EGG CURRY, FRIED RICE, ROTI & KHEER', // Monday
+        'N/A', // Tuesday
+        'CHICKEN MASALA, DAL, SOYA RICE, ROTI & SALAD', // Wednesday
+        'EGG AALOO DUM, RICE, ROTI & SALAD', // Thursday
+        'HYDRABADI BIRYANI, RAITA & HALWA', // Friday
+        'KEEMA, DAL, RICE, ROTI & SALAD' // Saturday
+      ],
+      dinner: [
+        'CHICKEN BIRYANI, RAITA & SALAD', // Sunday
+        'TANDOORI CHICKEN, PARATHA (PLAIN) & HALWA', // Monday
+        'N/A', // Tuesday
+        'MURADABADI BIRYANI, CHUTNEY & KHEER', // Wednesday
+        'CHICKEN KORMA, LACHHA PARATHA & SALAD', // Thursday
+        'EGG BHURJI, DAL, JEERA RICE, ROTI & SALAD', // Friday
+        'BUTTER CHICKEN, SATTU PARATHA, SWEETS' // Saturday
+      ]
+    },
+    'classic': {
+      lunch: [
+        'MIX-VEG, DAL, RICE & SALAD', // Sunday
+        'AALOO SOYABEEN, RICE & SALAD', // Monday
+        'RAJMA, RICE & RAITA', // Tuesday
+        'CHICKEN CURRY, RICE & SALAD', // Wednesday
+        'VEGITABLE, RICE & SALAD', // Thursday
+        'CHHOLE MASALA, RICE & SALAD', // Friday
+        'KHICHDI, AALOO CHOKHA / PICKLE' // Saturday
+      ],
+      dinner: [
+        'CHICKEN BIRYANI, SALAD & RAITA', // Sunday
+        'SEASONAL VEG, ROTI & SALAD', // Monday
+        'KADAI PANEER, ROTI & HALWA', // Tuesday
+        'DAL FRY, ROTI & SALAD', // Wednesday
+        'MIX-VEG, ROTI & SALAD', // Thursday
+        'EGG CURRY, ROTI & SALAD', // Friday
+        'CHHOLE MASALA, PURI & SWEETS' // Saturday
+      ]
+    }
+  };
+
+  // Default to classic if plan type not found
+  const plan = mealsByDay[planType] || mealsByDay['classic'];
+  const meals = plan[mealType] || plan['lunch'];
+  
+  return meals[dayOfWeek] || 'Dal Rice';
+};
+
 // @desc    Select meal for specific date
 // @route   POST /api/meals/select
 // @access  Private (Customer)
@@ -701,6 +876,16 @@ exports.getAggregatedMealOrders = async (req, res) => {
     console.log('   Date range START:', deliveryDateStart);
     console.log('   Date range END:', deliveryDateEnd);
 
+    // =========================================================
+    // KITCHEN READINESS: Ensure all active subscriptions have meal orders
+    // This creates default meals on-demand for subscriptions without orders
+    // Owner can now see COMPLETE cooking list even before cutoff/cron
+    // =========================================================
+    console.log('');
+    console.log('🔧 [KITCHEN READINESS] Running on-demand default meal creation...');
+    await ensureDefaultMealsExist(deliveryDateStart);
+    console.log('');
+
     // Get active users only
     const activeUserIds = await User.find({ 
       role: 'customer', 
@@ -733,6 +918,7 @@ exports.getAggregatedMealOrders = async (req, res) => {
     console.log('   ℹ️  Includes ALL meals: user-selected + defaults');
     console.log('   ℹ️  Dashboard shows ACTIVITY VIEW (createdAt = today)');
     console.log('   ℹ️  Different counts are EXPECTED and CORRECT');
+    console.log('   ✅  Kitchen now shows COMPLETE list (all active subscriptions)');
     console.log('');
     
     // Debug: Show first few meal orders
