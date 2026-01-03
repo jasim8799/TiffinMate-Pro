@@ -458,3 +458,86 @@ exports.autoCreateTodaysDeliveries = async (req, res) => {
     });
   }
 };
+
+// @desc    Mark all today's deliveries as out for delivery
+// @route   PATCH /api/deliveries/mark-out-for-delivery
+// @access  Private (Owner only)
+exports.markAllOutForDelivery = async (req, res) => {
+  try {
+    const today = moment().startOf('day').toDate();
+    const tomorrow = moment().add(1, 'day').startOf('day').toDate();
+
+    // Get active users only
+    const activeUserIds = await User.find({ 
+      role: 'customer', 
+      isActive: true,
+      deletedAt: { $exists: false }
+    }).distinct('_id');
+
+    // Find all today's deliveries that are preparing
+    const deliveries = await Delivery.find({
+      deliveryDate: { $gte: today, $lt: tomorrow },
+      user: { $in: activeUserIds },
+      status: 'preparing'
+    }).populate('user', 'name mobile');
+
+    if (deliveries.length === 0) {
+      return res.status(200).json({
+        success: true,
+        message: 'No deliveries to mark as out for delivery',
+        data: {
+          updated: 0
+        }
+      });
+    }
+
+    // Update all deliveries to out-for-delivery
+    const updatePromises = deliveries.map(async (delivery) => {
+      delivery.status = 'on-the-way';
+      delivery.outForDeliveryTime = new Date();
+      await delivery.save();
+
+      // Emit socket event for each user
+      socketService.emitOutForDelivery({
+        _id: delivery._id,
+        user: delivery.user._id,
+        status: delivery.status,
+        deliveryDate: delivery.deliveryDate,
+        mealType: delivery.mealType
+      });
+
+      // Send SMS notification (optional)
+      try {
+        await smsService.sendDeliveryOnWay(
+          delivery.user.mobile, 
+          delivery.user.name, 
+          delivery.user._id
+        );
+      } catch (smsError) {
+        console.error('SMS error for user', delivery.user._id, ':', smsError.message);
+      }
+
+      return delivery;
+    });
+
+    await Promise.all(updatePromises);
+
+    console.log(`✅ Marked ${deliveries.length} deliveries as out for delivery`);
+
+    res.status(200).json({
+      success: true,
+      message: `Marked ${deliveries.length} deliveries as out for delivery`,
+      data: {
+        updated: deliveries.length
+      }
+    });
+  } catch (error) {
+    console.error('Mark out for delivery error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error marking deliveries as out for delivery',
+      error: error.message
+    });
+  }
+};
+
