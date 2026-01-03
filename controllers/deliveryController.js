@@ -257,9 +257,16 @@ exports.getMyTodayDelivery = async (req, res) => {
       });
     }
 
+    // Get computed delivery status based on time
+    const computedStatus = delivery.getDeliveryStatus();
+    
+    // Return delivery with computed status
+    const deliveryData = delivery.toObject();
+    deliveryData.deliveryStatus = computedStatus;
+
     res.status(200).json({
       success: true,
-      data: delivery
+      data: deliveryData
     });
   } catch (error) {
     console.error('Get today delivery error:', error);
@@ -494,6 +501,7 @@ exports.markAllOutForDelivery = async (req, res) => {
     // Update all deliveries to out-for-delivery
     const updatePromises = deliveries.map(async (delivery) => {
       delivery.status = 'on-the-way';
+      delivery.deliveryStatus = 'OUT_FOR_DELIVERY';
       delivery.outForDeliveryTime = new Date();
       await delivery.save();
 
@@ -502,6 +510,7 @@ exports.markAllOutForDelivery = async (req, res) => {
         _id: delivery._id,
         user: delivery.user._id,
         status: delivery.status,
+        deliveryStatus: delivery.deliveryStatus,
         deliveryDate: delivery.deliveryDate,
         mealType: delivery.mealType
       });

@@ -25,6 +25,11 @@ const deliverySchema = new mongoose.Schema({
     enum: ['preparing', 'on-the-way', 'delivered', 'paused', 'disabled'],
     default: 'preparing'
   },
+  deliveryStatus: {
+    type: String,
+    enum: ['IDLE', 'PREPARING', 'OUT_FOR_DELIVERY', 'DELIVERED'],
+    default: 'IDLE'
+  },
   deliveryBoy: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User'
@@ -67,18 +72,65 @@ deliverySchema.methods.updateStatus = async function(newStatus) {
   switch (newStatus) {
     case 'preparing':
       this.preparingStartTime = new Date();
+      this.deliveryStatus = 'PREPARING';
       break;
     case 'on-the-way':
       this.outForDeliveryTime = new Date();
+      this.deliveryStatus = 'OUT_FOR_DELIVERY';
       // Set ETA to 1 hour from now
       this.estimatedDeliveryTime = new Date(Date.now() + 60 * 60 * 1000);
       break;
     case 'delivered':
       this.deliveredTime = new Date();
+      this.deliveryStatus = 'DELIVERED';
       break;
   }
   
   await this.save();
+};
+
+// Method to get time-aware delivery status
+deliverySchema.methods.getDeliveryStatus = function() {
+  const now = new Date();
+  const currentHour = now.getHours();
+  const currentMinute = now.getMinutes();
+  
+  // Define meal times
+  const LUNCH_TIME = 12; // 12:00 PM
+  const DINNER_TIME = 20; // 8:00 PM
+  
+  // If owner has marked as OUT_FOR_DELIVERY
+  if (this.deliveryStatus === 'OUT_FOR_DELIVERY') {
+    // Check if 1 hour has passed since outForDeliveryTime
+    if (this.outForDeliveryTime) {
+      const hoursSinceDelivery = (now - this.outForDeliveryTime) / (1000 * 60 * 60);
+      if (hoursSinceDelivery >= 1) {
+        return 'DELIVERED';
+      }
+    }
+    return 'OUT_FOR_DELIVERY';
+  }
+  
+  // If already delivered
+  if (this.deliveryStatus === 'DELIVERED') {
+    return 'DELIVERED';
+  }
+  
+  // Check if within 1 hour before meal time
+  const mealType = this.mealType.toLowerCase();
+  if (mealType === 'lunch' || mealType === 'both') {
+    if (currentHour === LUNCH_TIME - 1 || (currentHour === LUNCH_TIME && currentMinute === 0)) {
+      return 'PREPARING';
+    }
+  }
+  
+  if (mealType === 'dinner' || mealType === 'both') {
+    if (currentHour === DINNER_TIME - 1 || (currentHour === DINNER_TIME && currentMinute === 0)) {
+      return 'PREPARING';
+    }
+  }
+  
+  return 'IDLE';
 };
 
 module.exports = mongoose.model('Delivery', deliverySchema);

@@ -650,6 +650,86 @@ class CronService {
     return job;
   }
 
+  // Auto-update delivery statuses based on time (runs every 15 minutes)
+  autoUpdateDeliveryStatuses() {
+    const jobName = 'Auto Update Delivery Statuses';
+    
+    // Run every 15 minutes to check and update delivery statuses
+    const job = cron.schedule('*/15 * * * *', async () => {
+      logger.info(`Running: ${jobName}`);
+      
+      try {
+        const today = moment().startOf('day').toDate();
+        const tomorrow = moment().add(1, 'day').startOf('day').toDate();
+        
+        // Get all today's deliveries
+        const deliveries = await Delivery.find({
+          deliveryDate: { $gte: today, $lt: tomorrow },
+          deliveryStatus: { $in: ['IDLE', 'PREPARING', 'OUT_FOR_DELIVERY'] }
+        }).populate('user', 'name mobile');
+        
+        let updatedCount = 0;
+        
+        for (const delivery of deliveries) {
+          try {
+            const computedStatus = delivery.getDeliveryStatus();
+            const currentStatus = delivery.deliveryStatus;
+            
+            // Only update if status has changed
+            if (computedStatus !== currentStatus) {
+              delivery.deliveryStatus = computedStatus;
+              
+              // Update legacy status field too
+              if (computedStatus === 'PREPARING' && delivery.status !== 'preparing') {
+                delivery.status = 'preparing';
+                delivery.preparingStartTime = new Date();
+              } else if (computedStatus === 'OUT_FOR_DELIVERY' && delivery.status !== 'on-the-way') {
+                delivery.status = 'on-the-way';
+                if (!delivery.outForDeliveryTime) {
+                  delivery.outForDeliveryTime = new Date();
+                }
+              } else if (computedStatus === 'DELIVERED' && delivery.status !== 'delivered') {
+                delivery.status = 'delivered';
+                if (!delivery.deliveredTime) {
+                  delivery.deliveredTime = new Date();
+                }
+              }
+              
+              await delivery.save();
+              
+              // Emit socket event for status change
+              if (delivery.user && delivery.user._id) {
+                socketService.emitDeliveryStatusUpdated({
+                  _id: delivery._id,
+                  user: delivery.user._id,
+                  status: delivery.status,
+                  deliveryStatus: computedStatus,
+                  deliveryDate: delivery.deliveryDate,
+                  mealType: delivery.mealType
+                });
+              }
+              
+              updatedCount++;
+              logger.info(`Updated delivery ${delivery._id} from ${currentStatus} to ${computedStatus}`);
+            }
+          } catch (err) {
+            logger.error(`Failed to update delivery ${delivery._id}`, err);
+          }
+        }
+        
+        if (updatedCount > 0) {
+          logger.success(`${jobName}: Updated ${updatedCount} deliveries`);
+        }
+      } catch (error) {
+        logger.error(`${jobName} failed`, error);
+      }
+    });
+    
+    this.jobs.push({ name: jobName, job });
+    logger.info(`Scheduled: ${jobName} - Every 15 minutes`);
+    return job;
+  }
+
   // Start all cron jobs
   startAllJobs() {
     logger.info('Starting all cron jobs...');
@@ -661,6 +741,7 @@ class CronService {
     this.autoAssignDefaultMeals();
     this.autoMarkDelivered();
     this.autoCreateDeliveries();
+    this.autoUpdateDeliveryStatuses(); // NEW: Auto-update delivery statuses
     this.dailyMidnightTasks(); // NEW: Daily midnight subscription management
     
     logger.success(`All ${this.jobs.length} cron jobs started successfully`);
