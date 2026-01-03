@@ -7,6 +7,7 @@ const ExtraTiffin = require('../models/ExtraTiffin');
 const Pause = require('../models/Pause');
 const MealOrder = require('../models/MealOrder');
 const moment = require('moment');
+const { getTodayMeals } = require('../utils/mealCounter');
 
 // @desc    Get dashboard statistics
 // @route   GET /api/admin/dashboard
@@ -47,62 +48,28 @@ exports.getDashboardStats = async (req, res) => {
       user: { $in: activeUserIds }
     });
 
-    // ✅ TODAY MEALS TO COOK - Same as Kitchen (cooking schedule, not activity)
-    // This shows ALL meals to cook today (user-selected + defaults)
-    // MATCHES Kitchen exactly - no filtering
-    const todayStart = moment().startOf('day').toDate();
-    const todayEnd = moment().endOf('day').toDate();
-
-    console.log('📊 Dashboard Stats - TODAY Meals to Cook:');
-    console.log('   Querying for meals to cook TODAY (deliveryDate = today)');
-    console.log('   Date range:', todayStart, 'to', todayEnd);
-    console.log('   ✅ INCLUDING: ALL meals (user-selected + defaults)');
-    console.log('   ✅ MATCHES: Kitchen cooking schedule exactly');
+    // ======================================================================
+    // ✅ TODAY MEALS TO COOK - Using SINGLE SOURCE OF TRUTH
+    // ======================================================================
+    console.log('📊 [DASHBOARD] Getting today\'s meals using canonical query...');
     
-    // Get ALL meal orders for TODAY (same query as Kitchen uses)
-    // Include user-selected AND system-generated defaults
-    const todayMealOrders = await MealOrder.find({
-      deliveryDate: { $gte: todayStart, $lt: todayEnd },
-      user: { $in: activeUserIds }
-    });
+    const todayMealsData = await getTodayMeals(activeUserIds, MealOrder);
+    
+    const { lunchCount, dinnerCount, total: totalTodayMeals, breakdown, duplicates } = todayMealsData;
 
-    let lunchCount = 0;
-    let dinnerCount = 0;
-
-    todayMealOrders.forEach(order => {
-      if (order.mealType === 'lunch') {
-        lunchCount++;
-      } else if (order.mealType === 'dinner') {
-        dinnerCount++;
-      }
-    });
-
-    const totalTodayMeals = lunchCount + dinnerCount;
-
-    // Debug: Get breakdown of user-selected vs defaults
-    const userSelected = todayMealOrders.filter(o => 
-      o.selectedMeal?.isDefault === false || 
-      (!o.createdBy || (o.createdBy !== 'system' && o.createdBy !== 'system-kitchen'))
-    );
-    const systemGenerated = todayMealOrders.filter(o => 
-      o.selectedMeal?.isDefault === true || 
-      o.createdBy === 'system' || 
-      o.createdBy === 'system-kitchen'
-    );
-
-    console.log('   ✅ Meals to Cook Today (COMPLETE LIST):');
+    console.log('📊 [DASHBOARD] Today\'s Meals (CANONICAL):');
     console.log(`      - Lunch: ${lunchCount}`);
     console.log(`      - Dinner: ${dinnerCount}`);
     console.log(`      - Total: ${totalTodayMeals}`);
-    console.log('');
-    console.log('   📊 Breakdown by Source:');
-    console.log(`      - User-selected: ${userSelected.length}`);
-    console.log(`      - Default meals: ${systemGenerated.length}`);
-    console.log(`      - Total: ${todayMealOrders.length}`);
-    console.log('');
-    console.log('   ℹ️  IMPORTANT: This is COOKING VIEW (meals to cook today)');
-    console.log('   ℹ️  Includes ALL meals: user-selected + defaults');
-    console.log('   ℹ️  Dashboard = Kitchen counts (IDENTICAL)');
+    console.log('   📊 Breakdown:');
+    console.log(`      - User-selected: ${breakdown.userSelected}`);
+    console.log(`      - System-generated: ${breakdown.systemGenerated}`);
+    
+    if (duplicates.length > 0) {
+      console.error(`   ❌ WARNING: ${duplicates.length} duplicate meal orders detected!`);
+    }
+    
+    console.log('   ✅ Dashboard using SINGLE SOURCE OF TRUTH');
     console.log('');
     
     // Debug: Check if ANY meal orders exist at all

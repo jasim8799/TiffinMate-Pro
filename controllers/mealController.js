@@ -8,6 +8,7 @@ const socketService = require('../services/socketService');
 const moment = require('moment');
 const { createNotification } = require('./notificationController');
 const User = require('../models/User');
+const { getTodayMeals } = require('../utils/mealCounter');
 
 // =========================================================
 // HELPER: Ensure default meals exist for all active subscriptions
@@ -862,63 +863,56 @@ exports.getAggregatedMealOrders = async (req, res) => {
   try {
     const { date } = req.query;
     
-    // CRITICAL: Always use tomorrow's date for meal orders
-    // Users select meals for TOMORROW, so we MUST query TOMORROW
-    // Ignore date parameter to avoid mismatches - always query tomorrow
-    const targetDate = moment().add(1, 'day').startOf('day');
+    // ======================================================================
+    // ✅ USING SINGLE SOURCE OF TRUTH - Same as Dashboard
+    // ======================================================================
+    // Kitchen shows meals to cook TODAY (changed from tomorrow)
+    // This matches Dashboard exactly - no date mismatch
+    const targetDate = moment().startOf('day');
     const deliveryDateStart = targetDate.toDate();
-    const deliveryDateEnd = targetDate.clone().add(1, 'day').toDate();
 
-    console.log('🍽️ Kitchen Aggregated Data:');
-    console.log('   ⚠️  FIXED: Always querying TOMORROW (users order for next day)');
-    console.log('   Query param date (IGNORED):', date || 'not provided');
-    console.log('   Using TOMORROW date:', targetDate.format('YYYY-MM-DD'));
-    console.log('   Date range START:', deliveryDateStart);
-    console.log('   Date range END:', deliveryDateEnd);
+    console.log('🍽️ [KITCHEN] Aggregated Meal Orders:');
+    console.log('   ✅ FIXED: Querying TODAY (same as Dashboard)');
+    console.log('   Date:', targetDate.format('YYYY-MM-DD'));
+    console.log('   Delivery date:', deliveryDateStart);
 
     // =========================================================
     // KITCHEN READINESS: Ensure all active subscriptions have meal orders
-    // This creates default meals on-demand for subscriptions without orders
-    // Owner can now see COMPLETE cooking list even before cutoff/cron
     // =========================================================
     console.log('');
     console.log('🔧 [KITCHEN READINESS] Running on-demand default meal creation...');
     await ensureDefaultMealsExist(deliveryDateStart);
     console.log('');
 
-    // Get active users only
+    // Get active users
     const activeUserIds = await User.find({ 
       role: 'customer', 
       isActive: true,
       deletedAt: { $exists: false }
     }).distinct('_id');
 
-    // Get all meal orders for the specified date (using date range)
-    const mealOrders = await MealOrder.find({
-      deliveryDate: { $gte: deliveryDateStart, $lt: deliveryDateEnd },
-      user: { $in: activeUserIds }
-    })
-    .populate('user', 'name mobile userId address')
-    .sort({ mealType: 1, createdAt: 1 });
+    // ======================================================================
+    // ✅ USE SINGLE SOURCE OF TRUTH
+    // ======================================================================
+    console.log('🍽️ [KITCHEN] Getting today\'s meals using CANONICAL query...');
+    
+    const todayMealsData = await getTodayMeals(activeUserIds, MealOrder);
+    const { mealOrders, lunchCount, dinnerCount, total, breakdown, duplicates } = todayMealsData;
 
-    console.log('   Active users count:', activeUserIds.length);
-    console.log('   Found meal orders:', mealOrders.length);
+    console.log('🍽️ [KITCHEN] Today\'s Meals (CANONICAL):');
+    console.log(`      - Lunch: ${lunchCount}`);
+    console.log(`      - Dinner: ${dinnerCount}`);
+    console.log(`      - Total: ${total}`);
+    console.log('   📊 Breakdown:');
+    console.log(`      - User-selected: ${breakdown.userSelected}`);
+    console.log(`      - System-generated: ${breakdown.systemGenerated}`);
     
-    // Debug: Count default vs user-selected meals
-    const defaultMealsCount = mealOrders.filter(o => o.selectedMeal?.isDefault === true).length;
-    const userSelectedCount = mealOrders.filter(o => o.selectedMeal?.isDefault === false).length;
-    const noSelectionCount = mealOrders.filter(o => !o.selectedMeal?.name || o.selectedMeal?.name === 'Not Selected').length;
+    if (duplicates.length > 0) {
+      console.error(`   ❌ WARNING: ${duplicates.length} duplicate meal orders detected!`);
+    }
     
-    console.log('   📊 Meal Breakdown:');
-    console.log(`      - Default meals: ${defaultMealsCount}`);
-    console.log(`      - User-selected meals: ${userSelectedCount}`);
-    console.log(`      - No selection: ${noSelectionCount}`);
-    console.log('');
-    console.log('   ℹ️  IMPORTANT: This is COOKING VIEW (deliveryDate = tomorrow)');
-    console.log('   ℹ️  Includes ALL meals: user-selected + defaults');
-    console.log('   ℹ️  Dashboard shows ACTIVITY VIEW (createdAt = today)');
-    console.log('   ℹ️  Different counts are EXPECTED and CORRECT');
-    console.log('   ✅  Kitchen now shows COMPLETE list (all active subscriptions)');
+    console.log('   ✅ Kitchen using SINGLE SOURCE OF TRUTH');
+    console.log('   ✅ Should MATCH Dashboard exactly');
     console.log('');
     
     // Debug: Show first few meal orders
@@ -927,34 +921,14 @@ exports.getAggregatedMealOrders = async (req, res) => {
       mealOrders.slice(0, 5).forEach((order, i) => {
         const isDefaultFlag = order.selectedMeal?.isDefault ? '🔵 DEFAULT' : '🟢 USER-SELECTED';
         console.log(`   [${i}] ${isDefaultFlag} | ${order.user?.name} - ${order.mealType}: ${order.selectedMeal?.name}`);
-        console.log(`       deliveryDate: ${moment(order.deliveryDate).format('YYYY-MM-DD HH:mm:ss')}`);
-      });
-    } else {
-      console.log('   ⚠️ NO MEAL ORDERS FOUND! Debugging...');
-      // Check if ANY meal orders exist
-      const anyMeals = await MealOrder.countDocuments({});
-      console.log(`   Total meal orders in DB: ${anyMeals}`);
-      
-      const todayAnyUser = await MealOrder.countDocuments({
-        deliveryDate: { $gte: deliveryDateStart, $lt: deliveryDateEnd }
-      });
-      console.log(`   Meal orders for exact date range (any user): ${todayAnyUser}`);
-      
-      // Check sample dates in DB
-      const sampleDates = await MealOrder.find({}).limit(5).select('deliveryDate mealType').sort({ deliveryDate: -1 });
-      console.log('   Sample deliveryDates in DB:');
-      sampleDates.forEach((order, i) => {
-        console.log(`   [${i}] ${moment(order.deliveryDate).format('YYYY-MM-DD HH:mm:ss')} (${order.mealType})`);
       });
     }
 
-    // Aggregate meal counts
+    // Aggregate meal counts for Kitchen display
     const lunchCounts = {};
     const dinnerCounts = {};
     const customerDetails = [];
     const ingredientCounts = {};
-    let totalLunchOrders = 0;
-    let totalDinnerOrders = 0;
 
     mealOrders.forEach(order => {
       const mealName = order.selectedMeal?.name || 'Not Selected';
@@ -973,17 +947,14 @@ exports.getAggregatedMealOrders = async (req, res) => {
         orderId: order._id
       });
 
-      // Aggregate counts (include both default and user-selected)
+      // Aggregate counts by meal name
       if (mealType === 'lunch') {
         lunchCounts[mealName] = (lunchCounts[mealName] || 0) + 1;
-        totalLunchOrders++;
       } else if (mealType === 'dinner') {
         dinnerCounts[mealName] = (dinnerCounts[mealName] || 0) + 1;
-        totalDinnerOrders++;
       }
 
-      // Aggregate ingredients by parsing meal name string
-      // selectedMeal.name is a comma-separated string like "BUTTER CHICKEN, SATTU PARATHA, SWEETS"
+      // Aggregate ingredients
       if (mealName && mealName !== 'Not Selected') {
         const items = mealName.split(',');
         items.forEach(item => {
@@ -1006,11 +977,11 @@ exports.getAggregatedMealOrders = async (req, res) => {
       count
     })).sort((a, b) => b.count - a.count);
 
-    // Create Order Summary
+    // Create Order Summary using canonical counts
     const orderSummary = {
-      Lunch: totalLunchOrders,
-      Dinner: totalDinnerOrders,
-      Total: totalLunchOrders + totalDinnerOrders
+      Lunch: lunchCount,
+      Dinner: dinnerCount,
+      Total: total
     };
 
     // Create Ingredient Summary (sorted by count descending)
@@ -1028,11 +999,11 @@ exports.getAggregatedMealOrders = async (req, res) => {
       success: true,
       data: {
         date: deliveryDateStart,
-        totalOrders: mealOrders.length,
+        totalOrders: total,
         lunchSummary,
         dinnerSummary,
-        totalLunch: totalLunchOrders,
-        totalDinner: totalDinnerOrders,
+        totalLunch: lunchCount,
+        totalDinner: dinnerCount,
         customerDetails,
         orderSummary,
         ingredientSummary
