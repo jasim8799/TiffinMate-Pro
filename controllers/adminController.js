@@ -79,6 +79,12 @@ exports.getDashboardStats = async (req, res) => {
     console.log(`      - Lunch: ${lunchCount}`);
     console.log(`      - Dinner: ${dinnerCount}`);
     console.log(`      - Total: ${totalTodayOrders}`);
+    console.log('');
+    console.log('   ℹ️  IMPORTANT: This is ACTIVITY VIEW (orders placed today)');
+    console.log('   ℹ️  These orders are FOR delivery tomorrow/future');
+    console.log('   ℹ️  Kitchen shows COOKING VIEW (orders to cook tomorrow)');
+    console.log('   ℹ️  Dashboard ≠ Kitchen counts is EXPECTED and CORRECT');
+    console.log('');
     
     // Debug: Check if ANY meal orders exist at all
     if (totalTodayOrders === 0) {

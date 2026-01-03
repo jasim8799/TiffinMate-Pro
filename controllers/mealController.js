@@ -728,6 +728,12 @@ exports.getAggregatedMealOrders = async (req, res) => {
     console.log(`      - Default meals: ${defaultMealsCount}`);
     console.log(`      - User-selected meals: ${userSelectedCount}`);
     console.log(`      - No selection: ${noSelectionCount}`);
+    console.log('');
+    console.log('   ℹ️  IMPORTANT: This is COOKING VIEW (deliveryDate = tomorrow)');
+    console.log('   ℹ️  Includes ALL meals: user-selected + defaults');
+    console.log('   ℹ️  Dashboard shows ACTIVITY VIEW (createdAt = today)');
+    console.log('   ℹ️  Different counts are EXPECTED and CORRECT');
+    console.log('');
     
     // Debug: Show first few meal orders
     if (mealOrders.length > 0) {
