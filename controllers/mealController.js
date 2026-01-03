@@ -861,24 +861,32 @@ exports.getAggregatedMealOrders = async (req, res) => {
     const { date } = req.query;
     
     // ======================================================================
-    // ✅ USING SINGLE SOURCE OF TRUTH - Same as Dashboard
+    // ✅ DATE-BASED KITCHEN VIEW - Can view any date
     // ======================================================================
-    // Kitchen shows meals to cook TODAY (changed from tomorrow)
-    // This matches Dashboard exactly - no date mismatch
-    const targetDate = moment().startOf('day');
+    // Parse the date parameter, default to today if not provided
+    let targetDate;
+    if (date) {
+      targetDate = moment(date, 'YYYY-MM-DD').startOf('day');
+      if (!targetDate.isValid()) {
+        targetDate = moment().startOf('day');
+      }
+    } else {
+      targetDate = moment().startOf('day');
+    }
+    
     const deliveryDateStart = targetDate.toDate();
+    const deliveryDateEnd = targetDate.clone().endOf('day').toDate();
 
     console.log('🍽️ [KITCHEN] Aggregated Meal Orders:');
-    console.log('   ✅ FIXED: Querying TODAY (same as Dashboard)');
-    console.log('   Date:', targetDate.format('YYYY-MM-DD'));
-    console.log('   Delivery date:', deliveryDateStart);
+    console.log('   📅 Selected Date:', targetDate.format('YYYY-MM-DD'));
+    console.log('   🕐 Start:', deliveryDateStart);
+    console.log('   🕐 End:', deliveryDateEnd);
 
     // =========================================================
-    // KITCHEN READINESS: Ensure all active subscriptions have meal orders
+    // KITCHEN VIEW: READ-ONLY - No meal creation during fetch
     // =========================================================
-    console.log('');
-    console.log('🔧 [KITCHEN READINESS] Running on-demand default meal creation...');
-    await ensureDefaultMealsExist(deliveryDateStart);
+    // We only show existing meals, no auto-creation in kitchen view
+    console.log('   ℹ️  Kitchen view is READ-ONLY (no meal creation)');
     console.log('');
 
     // Get active users
@@ -889,25 +897,35 @@ exports.getAggregatedMealOrders = async (req, res) => {
     }).distinct('_id');
 
     // ======================================================================
-    // ✅ TODAY MEALS TO COOK - STRICT TODAY ONLY
+    // ✅ FETCH MEALS FOR SELECTED DATE ONLY
     // ======================================================================
-    console.log('🍽️ [KITCHEN] Getting TODAY meals ONLY...');
+    console.log('🍽️ [KITCHEN] Getting meals for selected date...');
     
-    const todayMealsData = await getTodayMeals(activeUserIds, MealOrder);
-    const { mealOrders, lunchCount, dinnerCount, totalUsers, duplicates } = todayMealsData;
+    const mealOrders = await MealOrder.find({
+      deliveryDate: {
+        $gte: deliveryDateStart,
+        $lte: deliveryDateEnd
+      },
+      user: { $in: activeUserIds }
+    })
+    .populate('user', 'userId name mobile address')
+    .lean();
 
-    console.log('🍽️ [KITCHEN] Meals to Cook TODAY:');
+    // Count lunch and dinner
+    let lunchCount = 0;
+    let dinnerCount = 0;
+    
+    mealOrders.forEach(order => {
+      if (order.mealType === 'lunch') lunchCount++;
+      if (order.mealType === 'dinner') dinnerCount++;
+    });
+    
+    const totalUsers = mealOrders.length;
+
+    console.log('🍽️ [KITCHEN] Meals for selected date:');
     console.log(`      - Lunch: ${lunchCount}`);
     console.log(`      - Dinner: ${dinnerCount}`);
     console.log(`      - Total: ${totalUsers}`);
-    
-    if (duplicates.length > 0) {
-      console.error(`   ❌ WARNING: ${duplicates.length} duplicate meal orders detected!`);
-    }
-    
-    console.log('   ✅ Kitchen: TODAY ONLY (no tomorrow)');
-    console.log('   ✅ Should MATCH Dashboard exactly');
-    console.log('');
     
     const total = totalUsers;
     
