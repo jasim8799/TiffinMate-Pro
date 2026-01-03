@@ -47,18 +47,18 @@ exports.getDashboardStats = async (req, res) => {
       user: { $in: activeUserIds }
     });
 
-    // ✅ TODAY ORDER STATUS - Meals to be cooked TODAY (deliveryDate = today)
-    // This shows what owner needs to prepare RIGHT NOW
+    // ✅ TODAY ORDER STATUS - Orders PLACED today (activity view)
+    // This shows fresh orders created today, not delivery schedule
     const todayStart = moment().startOf('day').toDate();
     const todayEnd = moment().endOf('day').toDate();
 
-    console.log('📊 Dashboard Stats - TODAY Order Status:');
-    console.log('   Querying for TODAY (deliveryDate = today)');
+    console.log('📊 Dashboard Stats - TODAY Order Status (Activity View):');
+    console.log('   Querying for orders PLACED today (createdAt = today)');
     console.log('   Date range:', todayStart, 'to', todayEnd);
     
-    // Get today's meal orders by meal type
+    // Get meal orders PLACED today (using createdAt, not deliveryDate)
     const todayMealOrders = await MealOrder.find({
-      deliveryDate: { $gte: todayStart, $lte: todayEnd },
+      createdAt: { $gte: todayStart, $lte: todayEnd },
       user: { $in: activeUserIds }
     });
 
@@ -75,7 +75,7 @@ exports.getDashboardStats = async (req, res) => {
 
     const totalTodayOrders = lunchCount + dinnerCount;
 
-    console.log('   ✅ Today Orders Breakdown:');
+    console.log('   ✅ Orders Placed Today Breakdown:');
     console.log(`      - Lunch: ${lunchCount}`);
     console.log(`      - Dinner: ${dinnerCount}`);
     console.log(`      - Total: ${totalTodayOrders}`);
@@ -85,11 +85,11 @@ exports.getDashboardStats = async (req, res) => {
       const totalMealOrders = await MealOrder.countDocuments({});
       console.log('   ⚠️ Total meal orders in DB:', totalMealOrders);
       
-      // Check what dates exist in the DB
-      const sampleOrders = await MealOrder.find({}).sort({ deliveryDate: -1 }).limit(5).select('deliveryDate mealType user');
-      console.log('   ⚠️ Sample meal order dates in DB:');
-      sampleOrders.forEach(order => {
-        console.log(`      - ${moment(order.deliveryDate).format('YYYY-MM-DD')} ${order.mealType} (user: ${order.user})`);
+      // Check recent orders
+      const recentOrders = await MealOrder.find({}).sort({ createdAt: -1 }).limit(5).select('createdAt mealType deliveryDate user');
+      console.log('   ⚠️ Recent meal orders in DB:');
+      recentOrders.forEach(order => {
+        console.log(`      - Created: ${moment(order.createdAt).format('YYYY-MM-DD HH:mm')}, Type: ${order.mealType}, Delivery: ${moment(order.deliveryDate).format('YYYY-MM-DD')}`);
       });
     }
 
